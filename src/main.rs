@@ -1,21 +1,25 @@
 mod deck;
 use tokio::net::{TcpListener, TcpStream};
+use axum::{
+    routing::{get, post},
+    http::StatusCode,
+    Json, Router,
+};
 
-
-
-async fn handle(socket: TcpStream){
-    println!("Message {:?}", socket);
-    let mut connection = Connection
-
-}
 
 #[tokio::main]
 async fn main() {
+    println!("Start squirrel core");
+    let app = Router::new()
+        .route("/", get(create_room));
+    let addr = ([0,0,0,0], 5555).into();
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service()).await.unwrap();
+}
+
+
+async fn create_room() -> &'static str{
     let deck = deck::CardDeck::build();
-    let server = TcpListener::bind("127.0.0.1:5555").await.unwrap();
-    loop {
-        // The second item contains the IP and port of the new connection.
-        let (socket, ip) = server.accept().await.unwrap();
-        handle(socket).await;
-    }
+    println!("{:?}", deck);
+   "Hello world"
 }
