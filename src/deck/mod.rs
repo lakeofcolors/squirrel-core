@@ -1,19 +1,21 @@
 use constants::{cards, DESK_CAPACITY, SUITS};
 mod constants;
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
 
 #[derive(Debug, Clone)]
 struct Suit {
     name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Card {
     name: String,
     suit: String,
     record: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CardDeck {
     cards: Vec<Card>,
     capacity: u8,
