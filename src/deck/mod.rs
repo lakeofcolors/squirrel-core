@@ -1,7 +1,10 @@
 use constants::{cards, DESK_CAPACITY, SUITS};
 mod constants;
 use serde::{Deserialize, Serialize};
-use serde_json::Result;
+use serde_json::{Result, Value};
+use squirrel_core::utils::redis::RedisHA;
+use bb8_redis::redis::{cmd, AsyncCommands};
+
 
 #[derive(Debug, Clone)]
 struct Suit {
@@ -20,6 +23,50 @@ pub struct CardDeck {
     cards: Vec<Card>,
     capacity: u8,
 }
+
+pub struct User{
+    name: String,
+    id: String
+}
+
+pub struct Room{
+    deck: CardDeck,
+    user1: Option<User>,
+    user2: Option<User>,
+    user3: Option<User>,
+    user4: Option<User>,
+}
+
+
+impl Room {
+    // pub fn connect() {
+
+    // }
+
+    pub async fn find(sub_context: Value){
+        // TODO redis connect
+        let i = Self{
+            deck: CardDeck::build(),
+            user1: Some(User{
+                id: "1".to_string(),
+                name: "Vladimir".to_string()
+            }),
+            user2: None,
+            user3: None,
+            user4: None,
+        };
+
+        println!("find game");
+        let client = RedisHA::new().await;
+        let mut conn = client.get_rw().await;
+        let reply: String = cmd("SET").arg("foo").arg("bar").query_async(&mut *conn).await.unwrap();
+        let result: String = cmd("GET").arg("foo").query_async(&mut *conn).await.unwrap();
+        println!("{:?}", reply);
+        println!("{:?}", result);
+    }
+
+}
+
 
 impl CardDeck {
     pub fn build() -> Self {
@@ -41,7 +88,7 @@ impl CardDeck {
     }
 
     fn shuffle(&mut self) {
-        //  Faro Shuffle # TODO хуйня какая то а не алгоритм
+        // for &mut i in self.cards
         return ();
     }
 }

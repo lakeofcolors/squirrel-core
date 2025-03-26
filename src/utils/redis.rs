@@ -1,4 +1,1 @@
-use std::env;
-
-// struct RedisHA{
-// }
+use std::env;use bb8::{Pool, PooledConnection};use bb8_redis::RedisConnectionManager;pub struct RedisHA{    master: Pool<RedisConnectionManager>,    slave: Pool<RedisConnectionManager>,}impl RedisHA{    pub async fn new() -> Self{        let redis_url = env::var("REDIS_URL").unwrap_or("redis://localhost:6379".to_string());        let manager = RedisConnectionManager::new(redis_url).unwrap();        let pool = Pool::builder().build(manager).await.unwrap();        Self {            master: pool.clone(),            slave: pool,        }    }    pub async fn get_rw(&self) -> PooledConnection<'_, RedisConnectionManager>{        self.master.get().await.unwrap()    }    pub async fn get_ro(&self) -> PooledConnection<'_, RedisConnectionManager>{        self.slave.get().await.unwrap()    }}
