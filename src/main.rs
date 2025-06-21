@@ -28,6 +28,9 @@ async fn main() {
         .with_env_filter("info")
         .init();
 
+    info!("Logical cores: {}", num_cpus::get());
+    info!("Physical cores: {}", num_cpus::get_physical());
+
     let app_ctx = Arc::new(AppContext::new());
     let pg_pool = Arc::new(pg_pool().await.expect(""));
     set_global_context(app_ctx.clone());

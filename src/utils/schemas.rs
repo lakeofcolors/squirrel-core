@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, Mutex};
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 use futures_util::stream::SplitSink;
 use axum::extract::ws::WebSocket;
 use std::fmt;
+
+use crate::core::engine::GameEngine;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
 pub enum Suit {
@@ -11,6 +13,22 @@ pub enum Suit {
     Hearts,
     Diamonds,
     Clubs,
+}
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum EventType {
+    BeginGame,
+    PlayCard,
+    Hand,
+    EndGame,
+}
+
+pub struct GameEvent{
+    pub event_type: EventType,
+    pub room: Arc<Mutex<Room>>,
+
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize)]
@@ -64,6 +82,7 @@ pub struct Room{
     pub players: Arc<Mutex<Vec<Player>>>,
     pub deck: Arc<Mutex<Vec<Card>>>,
     pub trump_suit: Option<Suit>,
+    pub engine: Arc<dyn GameEngine>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Hash)]

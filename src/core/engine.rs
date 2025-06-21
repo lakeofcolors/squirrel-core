@@ -2,7 +2,7 @@ use std::collections::{VecDeque, HashMap};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
-use crate::utils::schemas::{Player, Room, Suit, Card};
+use crate::utils::schemas::{Player, Room, Suit, Card, GameEvent, EventType};
 use crate::core::pool::ConnectionPool;
 use tracing::{info, debug};
 use futures_util::SinkExt;
@@ -18,27 +18,54 @@ pub struct SearchEngine{
 }
 
 #[async_trait]
-pub trait GameEngine {
-    async fn start_game(room: Arc<Mutex<Room>>);
-    async fn create_deck() -> Arc<Mutex<Vec<Card>>>;
+pub trait GameEngine: EventSubscriber + std::fmt::Debug + Send + Sync {
+    async fn start_game(&self, room: Arc<Mutex<Room>>);
+    async fn create_deck(&self) -> Arc<Mutex<Vec<Card>>>;
 }
 
 #[async_trait]
 pub trait EventSubscriber: Send + Sync {
-    async fn on_update(&self ) -> anyhow::Result<()>;
+    async fn on_update(&self, event: GameEvent) -> anyhow::Result<()>;
+}
+
+#[derive(Debug)]
+pub struct SquirrelEngine{
+}
+
+impl SquirrelEngine {
+    fn new() -> Self{
+        Self{}
+    }
 }
 
 
-pub struct SquirrelEngine{
+#[async_trait]
+impl EventSubscriber for SquirrelEngine {
+    async fn on_update(&self, event: GameEvent)  -> anyhow::Result<()>{
+        match event.event_type {
+            EventType::BeginGame=> {
+                Ok(())
+            }
+            EventType::Hand => {
+                Ok(())
+            }
+            _ => {
+                Ok(())
+            }
+        }
+
+
+    }
 }
 
 
 #[async_trait]
 impl GameEngine for SquirrelEngine {
-    async fn start_game(room: Arc<Mutex<Room>>) {
+    async fn start_game(&self, room: Arc<Mutex<Room>>) {
         let room_lock = room.lock().await;
         // let mut scores: HashMap<Player, > = HashMap::new();
         info!("🎮 Game begin for {:?}", room_lock.players);
+        self.on_update(GameEvent{event_type: EventType::BeginGame, room: room.clone()}).await;
         let mut deck = room_lock.deck.lock().await;
         let mut players_lock = room_lock.players.lock().await;
 
@@ -47,6 +74,7 @@ impl GameEngine for SquirrelEngine {
                 if let Some(card) = deck.pop(){
                     player.hand.push(card);
                 }
+
             }
             info!("Player {} hand: {:?}", player.username, player.hand)
         }
@@ -61,7 +89,8 @@ impl GameEngine for SquirrelEngine {
         info!("🏆 Game is ended!");
     }
 
-    async fn create_deck() -> Arc<Mutex<Vec<Card>>>{
+
+    async fn create_deck(&self) -> Arc<Mutex<Vec<Card>>>{
         let suits = vec![Suit::Spades, Suit::Hearts, Suit::Diamonds, Suit::Clubs];
         let mut deck = Vec::new();
         for &suit in &suits {
@@ -99,18 +128,20 @@ impl SearchEngine {
         loop {
             let mut queue_lock = self.player_queue.lock().await;
             let mut rooms = self.rooms.lock().await;
+            let engine = Arc::new(SquirrelEngine::new());
             debug!("Queue players len: {:?}", queue_lock.len());
             if queue_lock.len() > 4 {
                 //TODO check healty players before create room
                 let room_players: Vec<Player> = queue_lock.drain(..4).collect();
                 let new_room = Arc::new(Mutex::new(Room{
                     players: Arc::new(Mutex::new(room_players)),
-                    deck: SquirrelEngine::create_deck().await,
+                    deck: engine.create_deck().await,
                     trump_suit: Some(Suit::Clubs),
+                    engine: engine.clone()
                 }));
                 rooms.push(new_room.clone());
                 tokio::spawn(async move {
-                    SquirrelEngine::start_game(new_room.clone()).await
+                    engine.start_game(new_room.clone()).await
                 });
 
             }

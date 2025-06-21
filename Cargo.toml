@@ -20,3 +20,4 @@ jsonwebtoken = "9.2.0"
 sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "tls-native-tls"] }
 dotenvy = "0.15.7"
 rand = "0.8"
+num_cpus = "1.16"

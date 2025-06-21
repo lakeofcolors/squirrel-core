@@ -35,8 +35,8 @@ pub async fn login(
     match authenticate_user(&pool, &payload.username, &payload.password).await {
         Ok(true) => {
             match (
-                generate_token(&payload.username, Some(3600)),       // 1 час
-                generate_token(&payload.username, Some(7 * 24 * 3600)) // 7 дней
+                generate_token(&payload.username, Some(3600)),       // 1 hour
+                generate_token(&payload.username, Some(7 * 24 * 3600)) // 7 days
             ) {
                 (Ok(access_token), Ok(refresh_token)) => {
                     let response = TokenResponse {
