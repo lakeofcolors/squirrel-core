@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev build-essential c
 RUN mkdir /app
 WORKDIR /app
 
-COPY ./.cargo ./.cargo
 COPY ./src ./src
 COPY Cargo.lock Cargo.toml ./
 
