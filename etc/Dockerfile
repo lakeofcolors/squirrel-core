@@ -7,7 +7,7 @@ RUN mkdir /app
 WORKDIR /app
 
 COPY ./src ./src
-COPY Cargo.lock Cargo.toml ./
+COPY Cargo.toml ./
 
 
 FROM base AS production
