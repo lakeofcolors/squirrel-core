@@ -1,10 +1,11 @@
-use crate::core::pool::ConnectionPool;
+// use crate::core::pool::ConnectionPool;
+use crate::core::manager::GameManager;
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct AppContext{
-    connection_pool: Arc<ConnectionPool>,
+    game_manager: Arc<GameManager>,
 }
 
 static GLOBAL_CONTEXT: OnceCell<Arc<AppContext>> = OnceCell::new();
@@ -20,12 +21,12 @@ pub fn get_global_context() -> Arc<AppContext> {
 impl AppContext {
     pub fn new() -> Self{
         Self{
-            connection_pool: ConnectionPool::new(),
+            game_manager: Arc::new(GameManager::new()),
         }
     }
 
-    pub fn connection_pool(&self) -> Arc<ConnectionPool>{
-        self.connection_pool.clone()
+    pub fn game_manager(&self) -> Arc<GameManager>{
+        self.game_manager.clone()
     }
 
 }

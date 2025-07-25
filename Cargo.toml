@@ -21,3 +21,5 @@ sqlx = { version = "0.7", features = ["postgres", "runtime-tokio", "tls-native-t
 dotenvy = "0.15.7"
 rand = "0.8"
 num_cpus = "1.16"
+tower-http = { version = "0.5", features = ["cors"] }
+http = "0.2"
