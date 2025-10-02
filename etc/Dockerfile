@@ -8,14 +8,13 @@ WORKDIR /app
 
 COPY ./src ./src
 COPY Cargo.toml .
+COPY .sqlx .sqlx
 
-ENV DATABASE_URL=postgresql://hotfrog:@db:5432/belka
-RUN cargo sqlx prepare
-
-
-FROM base AS production
+FROM base AS dev
 RUN --mount=type=cache,id=scrust_1,target=/usr/local/cargo/registry \
     --mount=type=cache,id=scrust_2,target=/app/target \
-    cargo build --release && cp /app/target/release/squirrel_core /app/squirrel_core
+    cargo build --release && cp /app/target/release/squirrel-core /app/squirrel-core
 
-CMD ["./squirrel_core"]
+
+CMD ["sqlx migrate run"]
+CMD ["./squirrel-core"]

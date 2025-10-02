@@ -42,15 +42,15 @@ async fn main() {
 
 
     let cors = CorsLayer::new()
-        .allow_origin(Any) // можно ограничить по домену
+        .allow_origin(Any)
         .allow_methods([Method::POST, Method::GET, Method::OPTIONS])
         .allow_headers([HeaderName::from_static("content-type"), HeaderName::from_static("authorization")]);
 
     let router = Router::new()
-        .route("/api/ws", get(ws_handler))
-        .route("/api/login", post(login))
+        .route("/v1/ws", get(ws_handler))
+        .route("/auth/login", post(login))
         .with_state(pg_pool)
-        .route("/api/me", post(me))
+        .route("/me", post(me))
         .layer(cors)
         .layer(Extension(app_ctx));
 

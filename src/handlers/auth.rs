@@ -11,6 +11,10 @@ pub struct LoginRequest {
     password: String,
 }
 
+pub struct TelegramAuthRequest {
+    init_data: String,
+}
+
 #[derive(Deserialize)]
 pub struct MeRequest {
     token: String,
@@ -52,6 +56,15 @@ pub async fn login(
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     }
 }
+
+// pub async fn telegram_login(
+//     State(pool): State<Arc<PgPool>>,
+//     Json(payload): Json<TelegramAuthRequest>,
+// ) -> impl IntoResponse{
+
+//     verify_telegram_auth()
+
+// }
 
 pub async fn me(
     Json(payload): Json<MeRequest>
