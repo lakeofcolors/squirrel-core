@@ -23,3 +23,7 @@ rand = "0.8"
 num_cpus = "1.16"
 tower-http = { version = "0.5", features = ["cors"] }
 http = "0.2"
+hex = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+url = "2.4"

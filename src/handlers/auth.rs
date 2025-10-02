@@ -2,7 +2,7 @@ use axum::{extract::{Json, State}, response::IntoResponse, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
-
+use crate::utils::telegram::verify_telegram_auth;
 use crate::utils::jwt::{generate_token, validate_token};
 
 #[derive(Deserialize)]
@@ -57,14 +57,48 @@ pub async fn login(
     }
 }
 
-// pub async fn telegram_login(
-//     State(pool): State<Arc<PgPool>>,
-//     Json(payload): Json<TelegramAuthRequest>,
-// ) -> impl IntoResponse{
+pub async fn telegram_login(
+    State(pool): State<Arc<PgPool>>,
+    Json(payload): Json<TelegramAuthRequest>,
+) -> impl IntoResponse {
+    let bot_token = std::env::var("BOT_TOKEN").expect("BOT TOKEN not set");
 
-//     verify_telegram_auth()
+    match verify_telegram_auth(&payload.init_data, &bot_token) {
+        Ok(user_info) => {
+            // user_info содержит user.id, first_name и т.д.
+            // пробуем найти юзера в БД
+            let user = sqlx::query_as!(
+                User,
+                "SELECT id, username FROM users WHERE telegram_id = $1",
+                user_info.id as i64
+            )
+            .fetch_optional(&*pool)
+            .await
+            .unwrap();
 
-// }
+            let username = if let Some(u) = user {
+                u.username
+            } else {
+                // создаём нового
+                let rec = sqlx::query!(
+                    "INSERT INTO users (telegram_id, username) VALUES ($1,$2) RETURNING username",
+                    user_info.id,
+                    user_info.username.clone().unwrap_or_else(|| user_info.first_name.clone())
+                )
+                .fetch_one(&*pool)
+                .await
+                .unwrap();
+                rec.username
+            };
+
+            // выдаём токен
+            let token = generate_token(&username, Some(3600)).unwrap();
+            (StatusCode::OK, token).into_response()
+        }
+        Err(_) => (StatusCode::UNAUTHORIZED, "Bad Telegram signature").into_response(),
+    }
+}
+
 
 pub async fn me(
     Json(payload): Json<MeRequest>
