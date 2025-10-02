@@ -11,6 +11,7 @@ pub struct LoginRequest {
     password: String,
 }
 
+#[derive(serde::Deserialize)]
 pub struct TelegramAuthRequest {
     init_data: String,
 }
@@ -70,7 +71,7 @@ pub async fn telegram_login(
             let user = sqlx::query_as!(
                 User,
                 "SELECT id, username FROM users WHERE telegram_id = $1",
-                user_info.id as i64
+                user_info.id
             )
             .fetch_optional(&*pool)
             .await

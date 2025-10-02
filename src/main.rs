@@ -11,7 +11,7 @@ use tracing_subscriber;
 use crate::utils::schemas::{WSIncomingMessage, SubOrUnsub};
 use crate::core::context::{AppContext, set_global_context};
 // use crate::utils::jwt::handle_auth;
-use crate::handlers::auth::{login, me};
+use crate::handlers::auth::{telegram_login, me};
 use crate::handlers::ws::ws_handler;
 use crate::utils::db::pg_pool;
 pub mod handlers;
@@ -48,7 +48,7 @@ async fn main() {
 
     let router = Router::new()
         .route("/v1/ws", get(ws_handler))
-        .route("/auth/login", post(login))
+        .route("/auth/login", post(telegram_login))
         .with_state(pg_pool)
         .route("/me", post(me))
         .layer(cors)
