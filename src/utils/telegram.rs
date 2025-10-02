@@ -1,40 +1,55 @@
 use hmac::{Hmac, Mac};
 use sha2::{Sha256, Digest};
+use serde::Deserialize;
+use std::collections::HashMap;
 
-pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<serde_json::Value, ()> {
+#[derive(Debug, Deserialize)]
+pub struct TelegramUser {
+    pub id: String,
+    pub username: Option<String>,
+    pub first_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TelegramInitData {
+    pub user: TelegramUser,
+    pub auth_date: String,
+}
+
+pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
     use url::form_urlencoded;
 
-    let parsed: Vec<(String, String)> = form_urlencoded::parse(init_data.as_bytes())
-        .into_owned()
+    let parsed: HashMap<String, String> =
+        form_urlencoded::parse(init_data.as_bytes()).into_owned().collect();
+
+    let hash = parsed.get("hash").ok_or(())?.to_owned();
+
+    let mut kv: Vec<(String, String)> = parsed
+        .iter()
+        .filter(|(k, _)| k.as_str() != "hash")
+        .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
+    kv.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let mut hash = None;
-    let mut data_check_string = String::new();
-
-    for (k, v) in parsed.iter() {
-        if k == "hash" {
-            hash = Some(v.clone());
-        }
-    }
-
-    let mut data: Vec<_> = parsed.into_iter().filter(|(k, _)| k != "hash").collect();
-    data.sort_by(|a, b| a.0.cmp(&b.0));
-
-    for (i, (k, v)) in data.iter().enumerate() {
-        if i > 0 {
-            data_check_string.push('\n');
-        }
-        data_check_string.push_str(&format!("{}={}", k, v));
-    }
+    let data_check_string = kv
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     let secret_key = Sha256::digest(bot_token.as_bytes());
-    let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).unwrap();
+    let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).map_err(|_| ())?;
     mac.update(data_check_string.as_bytes());
-    let calc_hash = hex::encode(mac.finalize().into_bytes());
+    let calc_hash = format!("{:x}", mac.finalize().into_bytes());
 
-    if Some(calc_hash) == hash {
-        Ok(serde_json::from_str::<serde_json::Value>(&format!("{{{}}}", data_check_string)).unwrap())
-    } else {
-        Err(())
+    if calc_hash != hash {
+        return Err(());
     }
+
+    let user_json = parsed.get("user").ok_or(())?;
+    let user: TelegramUser = serde_json::from_str(user_json).map_err(|_| ())?;
+
+    let auth_date = parsed.get("auth_date").cloned().unwrap_or_default();
+
+    Ok(TelegramInitData { user, auth_date })
 }
