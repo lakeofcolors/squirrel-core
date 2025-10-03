@@ -3,6 +3,8 @@ use sha2::{Sha256, Digest};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tracing::{info, warn, error};
+use url::form_urlencoded;
+use hex;
 
 #[derive(Debug, Deserialize)]
 pub struct TelegramUser {
@@ -18,10 +20,6 @@ pub struct TelegramInitData {
 }
 
 pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
-    use url::form_urlencoded;
-    use hmac::{Hmac, Mac};
-    use sha2::{Sha256, Digest};
-    use hex;
 
     let parsed: HashMap<String, String> =
         form_urlencoded::parse(init_data.as_bytes()).into_owned().collect();
@@ -42,6 +40,7 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         .join("\n");
 
     // derive secret key = sha256(bot_token)
+    let key = format!("WebAppData{}", bot_token);
     let secret_key = Sha256::digest(bot_token.as_bytes());
     let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).map_err(|_| ())?;
     mac.update(data_check_string.as_bytes());
