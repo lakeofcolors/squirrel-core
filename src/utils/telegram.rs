@@ -33,7 +33,6 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         .collect();
     kv.sort_by(|a, b| a.0.cmp(&b.0));
 
-    info()
 
     let data_check_string = kv
         .iter()
