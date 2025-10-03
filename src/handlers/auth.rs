@@ -63,18 +63,13 @@ pub async fn telegram_login(
                 .unwrap_or(init_data.user.first_name.clone());
 
             let user = sqlx::query!(
-                r#"
-                INSERT INTO users (telegram_id, username)
+                "INSERT INTO users (telegram_id, username)
                 VALUES ($1, $2)
                 ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username
-                RETURNING username
-                "#,
+                RETURNING username",
                 telegram_id,
                 username
             )
-            .fetch_one(&*pool)
-            .await;
-
             let final_username = match user {
                 Ok(record) => record.username.unwrap_or_else(|| "anon".to_string()),
                 Err(err) => {
