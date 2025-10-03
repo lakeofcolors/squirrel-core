@@ -53,7 +53,7 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
     info!("calc: {:?}", calc_hash);
     info!("hash: {:?}", hash);
 
-    if calc_hash.as_str()  == hash.as_str() {
+    if calc_hash == *hash {
         let user_json = params.get("user").ok_or(())?;
         let user: TelegramUser = serde_json::from_str(&user_json).map_err(|_| ())?;
         Ok(user)
