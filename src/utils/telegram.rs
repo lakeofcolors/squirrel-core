@@ -41,6 +41,8 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         .collect::<Vec<_>>()
         .join("\n");
 
+    info!("data check: {:?}", data_check_string);
+
     let secret_key = Sha256::digest(bot_token.as_bytes());
     let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).map_err(|_| ())?;
     mac.update(data_check_string.as_bytes());
