@@ -26,18 +26,13 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
 
     let hash = parsed.get("hash").ok_or(())?.to_owned();
 
-    let mut kv: Vec<(String, String)> = parsed
-        .iter()
-        .filter(|(k, _)| k.as_str() != "hash" && k.as_str() != "signature")
-        .map(|(k, v)| (k.clone(), v.clone()))
+    let mut kv: Vec<&str> = init_data
+        .split('&')
+        .filter(|s| !s.starts_with("hash=") && !s.starts_with("signature="))
         .collect();
-    kv.sort_by(|a, b| a.0.cmp(&b.0));
+    kv.sort();
 
-    let data_check_string = kv
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let data_check_string = kv.join("\n");
 
     let mut secret_mac = Hmac::<Sha256>::new_from_slice(b"WebAppData").map_err(|_| ())?;
     secret_mac.update(bot_token.as_bytes());
