@@ -29,7 +29,7 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
 
     let mut kv: Vec<(String, String)> = parsed
         .iter()
-        .filter(|(k, _)| k.as_str() != "hash")
+        .filter(|(k, _)| k.as_str() != "hash" && k.as_str() != "signature")
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     kv.sort_by(|a, b| a.0.cmp(&b.0));
