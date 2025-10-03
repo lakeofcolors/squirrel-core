@@ -39,11 +39,10 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         .collect::<Vec<_>>()
         .join("\n");
 
-    let mut secret = Hmac::<Sha256>::new_from_slice(b"WebAppData").map_err(|_| ())?;
-    secret.update(bot_token.as_bytes());
-    let secret_key = secret.finalize().into_bytes();
+    let mut secret_mac = Hmac::<Sha256>::new_from_slice(b"WebAppData").map_err(|_| ())?;
+    secret_mac.update(bot_token.as_bytes());
+    let secret_key = secret_mac.finalize().into_bytes();
 
-    // теперь HMAC c этим secret_key
     let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).map_err(|_| ())?;
     mac.update(data_check_string.as_bytes());
     let calc_hash = hex::encode(mac.finalize().into_bytes());
