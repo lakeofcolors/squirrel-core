@@ -8,7 +8,7 @@ use hex;
 
 #[derive(Debug, Deserialize)]
 pub struct TelegramUser {
-    pub id: String,
+    pub id: u64,
     pub username: Option<String>,
     pub first_name: String,
 }
@@ -20,7 +20,7 @@ pub struct TelegramInitData {
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramUser, ()> {
+pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
     let parsed = form_urlencoded::parse(init_data.as_bytes());
 
     let mut params: BTreeMap<String, String> = BTreeMap::new();
@@ -52,10 +52,9 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
 
     if calc_hash == hash {
         let user_json = params.get("user").ok_or(())?;
-
         info!("user: {:?}", user_json);
-        let user: TelegramUser = serde_json::from_str(&user_json).map_err(|_| ())?;
-        Ok(user)
+        let init_data: TelegramInitData = serde_json::from_str(&user_json).map_err(|_| ())?;
+        Ok(init_data)
     } else {
         Err(())
     }
