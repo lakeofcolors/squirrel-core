@@ -70,6 +70,9 @@ pub async fn telegram_login(
                 telegram_id,
                 username
             )
+            .fetch_one(&*pool)
+            .await;
+
             let final_username = match user {
                 Ok(record) => record.username.unwrap_or_else(|| "anon".to_string()),
                 Err(err) => {
@@ -77,7 +80,6 @@ pub async fn telegram_login(
                     panic!("DB error: {:?}", err);
                 }
             };
-
             match generate_token(&final_username, Some(3600)) {
                 Ok(token) => (StatusCode::OK, token).into_response(),
                 Err(err) => {
