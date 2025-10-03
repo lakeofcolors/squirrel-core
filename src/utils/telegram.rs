@@ -20,7 +20,7 @@ pub struct TelegramInitData {
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
+pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramUser, ()> {
     let parsed = form_urlencoded::parse(init_data.as_bytes());
 
     let mut params: BTreeMap<String, String> = BTreeMap::new();
@@ -55,8 +55,8 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
 
     if calc_hash == hash {
         let user_json = params.get("user").ok_or(())?;
-        let user: TelegramUser = serde_json::from_str(user_json).map_err(|_| ())?;
-        Ok(TelegramInitData { user })
+        let user: TelegramUser = serde_json::from_str(&user_json).map_err(|_| ())?;
+        Ok(user)
     } else {
         Err(())
     }

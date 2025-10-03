@@ -54,13 +54,12 @@ pub async fn telegram_login(
     info!("payload: {:?}", &payload.init_data);
 
     match verify_telegram_auth(&payload.init_data, &bot_token) {
-        Ok(init_data) => {
-            let telegram_id = init_data.user.id;
-            let username = init_data
-                .user
+        Ok(user) => {
+            let telegram_id = user.id;
+            let username = user
                 .username
                 .clone()
-                .unwrap_or(init_data.user.first_name.clone());
+                .unwrap_or(user.first_name.clone());
 
             let user = sqlx::query!(
                 "INSERT INTO users (telegram_id, username)
