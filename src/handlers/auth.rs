@@ -33,30 +33,6 @@ pub struct TokenResponse {
     refresh_token: String,
 }
 
-// pub async fn login(
-//     State(pool): State<Arc<PgPool>>,
-//     Json(payload): Json<LoginRequest>
-// ) -> impl IntoResponse {
-//     match authenticate_user(&pool, &payload.username, &payload.password).await {
-//         Ok(true) => {
-//             match (
-//                 generate_token(&payload.username, Some(3600)),       // 1 hour
-//                 generate_token(&payload.username, Some(7 * 24 * 3600)) // 7 days
-//             ) {
-//                 (Ok(access_token), Ok(refresh_token)) => {
-//                     let response = TokenResponse {
-//                         access_token,
-//                         refresh_token,
-//                     };
-//                     (StatusCode::OK, Json(response)).into_response()
-//                 }
-//                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "JWT generation failed").into_response(),
-//             }
-//         }
-//         Ok(false) => (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response(),
-//         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
-//     }
-// }
 
 pub async fn telegram_login(
     State(pool): State<Arc<PgPool>>,
@@ -83,7 +59,6 @@ pub async fn telegram_login(
             .await
             .unwrap();
 
-            // user.username → Option<String>
             let final_username = user.username.unwrap_or("anon".to_string());
 
             let token = generate_token(&final_username, Some(3600)).unwrap();
@@ -108,18 +83,3 @@ pub async fn me(
         Err(_) => (StatusCode::METHOD_NOT_ALLOWED, "Incorect token").into_response()
     }
 }
-
-// async fn authenticate_user(pool: &PgPool, username: &str, password: &str) -> Result<bool, sqlx::Error> {
-//     let user = sqlx::query!(
-//         "SELECT password FROM users WHERE username = $1",
-//         username
-//     )
-//     .fetch_optional(pool)
-//     .await?;
-
-//     if let Some(user) = user {
-//         return Ok(user.password == password);
-//     }
-
-//     Ok(false)
-// }

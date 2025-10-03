@@ -2,6 +2,7 @@ use hmac::{Hmac, Mac};
 use sha2::{Sha256, Digest};
 use serde::Deserialize;
 use std::collections::HashMap;
+use tracing::{info, warn, error};
 
 #[derive(Debug, Deserialize)]
 pub struct TelegramUser {
@@ -17,6 +18,7 @@ pub struct TelegramInitData {
 }
 
 pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
+    info!("Init data {}", init_data)
     use url::form_urlencoded;
 
     let parsed: HashMap<String, String> =
@@ -31,6 +33,8 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         .collect();
     kv.sort_by(|a, b| a.0.cmp(&b.0));
 
+    info()
+
     let data_check_string = kv
         .iter()
         .map(|(k, v)| format!("{k}={v}"))
@@ -41,6 +45,9 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
     let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).map_err(|_| ())?;
     mac.update(data_check_string.as_bytes());
     let calc_hash = format!("{:x}", mac.finalize().into_bytes());
+
+    info!("calc_hash {:?}", calc_hash)
+    info!("hash {:?}", hash)
 
     if calc_hash != hash {
         return Err(());
