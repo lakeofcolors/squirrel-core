@@ -11,11 +11,13 @@ COPY Cargo.toml .
 COPY .sqlx .sqlx
 COPY migrations ./migrations
 
+
 FROM base AS dev
+# RUN cargo sqlx prepare
 RUN --mount=type=cache,id=scrust_1,target=/usr/local/cargo/registry \
     --mount=type=cache,id=scrust_2,target=/app/target \
     cargo build --release && cp /app/target/release/squirrel-core /app/squirrel-core
 
-
+ENV RUST_BACKTRACE=1
 # RUN "sqlx migrate run"
 CMD ["./squirrel-core"]

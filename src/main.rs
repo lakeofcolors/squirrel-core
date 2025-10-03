@@ -23,11 +23,12 @@ use futures_util::StreamExt;
 use futures_util::SinkExt;
 use tower_http::cors::{CorsLayer, Any};
 use axum::http::{Method, HeaderName};
+use tower_http::trace::TraceLayer;
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
-        .with_env_filter("info")
+        .with_env_filter("debug")
         .init();
 
     info!("Logical cores: {}", num_cpus::get());
@@ -52,7 +53,8 @@ async fn main() {
         .with_state(pg_pool)
         .route("/me", post(me))
         .layer(cors)
-        .layer(Extension(app_ctx));
+        .layer(Extension(app_ctx))
+        .layer(TraceLayer::new_for_http());
 
     info!("Start server!");
     let server = TcpListener::bind("0.0.0.0:9221").await.unwrap();
