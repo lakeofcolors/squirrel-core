@@ -80,12 +80,18 @@ pub async fn telegram_login(
                     panic!("DB error: {:?}", err);
                 }
             };
-            match generate_token(&final_username, Some(3600)) {
-                Ok(token) => (StatusCode::OK, token).into_response(),
-                Err(err) => {
-                    error!("JWT generation failed: {:?}", err);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Token error").into_response()
+            match (
+                generate_token(final_username.as_str(), Some(3600)),       // 1 hour
+                generate_token(final_username.as_str(), Some(7 * 24 * 3600)) // 7 days
+            ) {
+                (Ok(access_token), Ok(refresh_token)) => {
+                    let response = TokenResponse {
+                        access_token,
+                        refresh_token,
+                    };
+                    (StatusCode::OK, Json(response)).into_response()
                 }
+                _ => (StatusCode::INTERNAL_SERVER_ERROR, "JWT generation failed").into_response(),
             }
         }
         Err(err) => {

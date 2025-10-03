@@ -11,6 +11,7 @@ pub struct TelegramUser {
     pub id: u64,
     pub username: Option<String>,
     pub first_name: String,
+    pub photo_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
