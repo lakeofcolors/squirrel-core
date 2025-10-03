@@ -19,6 +19,7 @@ pub struct TelegramInitData {
 
 pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
     info!("Init data {}", init_data);
+    info!("bot token {}", bot_token);
     use url::form_urlencoded;
 
     let parsed: HashMap<String, String> =
