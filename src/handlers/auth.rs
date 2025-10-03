@@ -1,5 +1,7 @@
 use axum::{extract::{Json, State}, response::IntoResponse, http::StatusCode};
 use serde::{Deserialize, Serialize};
+ use tracing::info;
+
 use sqlx::PgPool;
 use std::sync::Arc;
 use crate::utils::telegram::{verify_telegram_auth, TelegramUser, TelegramInitData};
@@ -39,6 +41,8 @@ pub async fn telegram_login(
     Json(payload): Json<TelegramAuthRequest>,
 ) -> impl IntoResponse {
     let bot_token = std::env::var("BOT_TOKEN").expect("BOT TOKEN not set");
+    info!("bot token: {:?}", bot_token);
+    info!("payload: {:?}", &payload.init_data);
 
     match verify_telegram_auth(&payload.init_data, &bot_token) {
         Ok(init_data) => {
