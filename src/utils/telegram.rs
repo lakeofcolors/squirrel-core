@@ -50,11 +50,6 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
     check_hmac.update(data_check_string.as_bytes());
     let calc_hash = hex::encode(check_hmac.finalize().into_bytes());
 
-    info!("calc: {:?}", calc_hash);
-    info!("hash: {:?}", hash);
-    dbg!(calc_hash.len(), calc_hash.as_bytes());
-    dbg!(hash.len(), hash.as_bytes());
-
     if calc_hash == hash {
         let user_json = params.get("user").ok_or(())?;
 
