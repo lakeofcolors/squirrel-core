@@ -18,9 +18,10 @@ pub struct TelegramInitData {
 }
 
 pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<TelegramInitData, ()> {
-    info!("Init data {}", init_data);
-    info!("bot token {}", bot_token);
     use url::form_urlencoded;
+    use hmac::{Hmac, Mac};
+    use sha2::{Sha256, Digest};
+    use hex;
 
     let parsed: HashMap<String, String> =
         form_urlencoded::parse(init_data.as_bytes()).into_owned().collect();
@@ -34,22 +35,17 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         .collect();
     kv.sort_by(|a, b| a.0.cmp(&b.0));
 
-
     let data_check_string = kv
         .iter()
         .map(|(k, v)| format!("{k}={v}"))
         .collect::<Vec<_>>()
         .join("\n");
 
-    info!("data check: {:?}", data_check_string);
-
+    // derive secret key = sha256(bot_token)
     let secret_key = Sha256::digest(bot_token.as_bytes());
     let mut mac = Hmac::<Sha256>::new_from_slice(&secret_key).map_err(|_| ())?;
     mac.update(data_check_string.as_bytes());
-    let calc_hash = format!("{:x}", mac.finalize().into_bytes());
-
-    info!("calc_hash {:?}", calc_hash);
-    info!("hash {:?}", hash);
+    let calc_hash = hex::encode(mac.finalize().into_bytes());
 
     if calc_hash != hash {
         return Err(());
@@ -57,7 +53,6 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
 
     let user_json = parsed.get("user").ok_or(())?;
     let user: TelegramUser = serde_json::from_str(user_json).map_err(|_| ())?;
-
     let auth_date = parsed.get("auth_date").cloned().unwrap_or_default();
 
     Ok(TelegramInitData { user, auth_date })
