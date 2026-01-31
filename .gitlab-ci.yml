@@ -1,14 +1,20 @@
-stages:
-  - smoke-test
+image: docker:26
+
+services:
+  - docker:26-dind
 
 variables:
+  DOCKER_TLS_CERTDIR: ""
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
-smoke-test:
-  stage: smoke-test
+stages:
+  - build
+
+build-image:
+  stage: build
+  tags:
+    - k8s
   script:
-    - echo "Runner is OK"
-    - echo ${CI_COMMIT_REF_NAME}
-    - echo ${CI_PIPELINE_SOURCE}
-    - date
-    - uname -a
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - docker build -t $IMAGE .
+    - docker push $IMAGE
