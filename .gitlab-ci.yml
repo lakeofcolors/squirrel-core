@@ -6,12 +6,21 @@ variables:
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
 smoke-test:
-  script: echo "Runner is OK"
+  stage: smoke-test
+  script:
+    - echo "Runner is OK ✅"
+    - echo "Branch: $CI_COMMIT_REF_NAME"
+    - echo "Pipeline source: $CI_PIPELINE_SOURCE"
+    - date
+    - uname -a
 
 docker-test:
+  stage: docker-test
   image: docker:stable
   services:
     - docker:dind
   script:
     - docker --version
+    - docker info --format '{{.ServerVersion}}'
     - docker run --rm hello-world
+    - echo "Если выше появилась надпись 'Hello from Docker!', значит dind работает отлично!"
