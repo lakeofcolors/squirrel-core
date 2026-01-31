@@ -8,11 +8,11 @@ variables:
 smoke-test:
   stage: smoke-test
   script:
-    - echo "Runner is OK ✅"
-    - echo "Branch: $CI_COMMIT_REF_NAME"
-    - echo "Pipeline source: $CI_PIPELINE_SOURCE"
-    - date
-    - uname -a
+    - 'echo "Runner is OK ✅"'
+    - 'echo "Branch: $CI_COMMIT_REF_NAME"'
+    - 'echo "Pipeline source: $CI_PIPELINE_SOURCE"'
+    - 'date'
+    - 'uname -a'
 
 docker-test:
   stage: docker-test
@@ -20,7 +20,7 @@ docker-test:
   services:
     - docker:dind
   script:
-    - docker --version
-    - docker info --format '{{.ServerVersion}}'
-    - docker run --rm hello-world
-    - echo "Если выше появилась надпись 'Hello from Docker!', значит dind работает отлично!"
+    - 'docker --version'
+    - 'docker info --format "{{.ServerVersion}}"'
+    - 'docker run --rm hello-world'
+    - 'echo "Если выше появилась надпись '\''Hello from Docker!'\'', значит dind работает отлично!"'
