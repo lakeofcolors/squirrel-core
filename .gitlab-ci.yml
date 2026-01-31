@@ -1,26 +1,17 @@
 stages:
-  - build
-  - deploy
+  - smoke-test
+  - docker-test
 
 variables:
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
-build:
-  stage: build
-  image: docker:26
-  services:
-    - docker:26-dind
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $IMAGE .
-    - docker push $IMAGE
-  only:
-    - main
+smoke-test:
+  script: echo "Runner is OK"
 
-deploy:
-  stage: deploy
-  image: bitnami/kubectl:latest
+docker-test:
+  image: docker:stable
+  services:
+    - docker:dind
   script:
-    - kubectl set image deployment/squirrel-core squirrel-core=$IMAGE -n game
-  only:
-    - main
+    - docker --version
+    - docker run --rm hello-world
