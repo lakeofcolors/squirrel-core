@@ -7,8 +7,8 @@ variables:
 smoke-test:
   stage: smoke-test
   script:
-    - echo "Runner is OK ✅"
-    - echo "Branch: $CI_COMMIT_REF_NAME"
-    - echo "Pipeline source: $CI_PIPELINE_SOURCE"
+    - echo "Runner is OK"
+    - echo "Branch: ${CI_COMMIT_REF_NAME}"
+    - echo "Pipeline source: ${CI_PIPELINE_SOURCE}"
     - date
     - uname -a
