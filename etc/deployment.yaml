@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squirrel-core
+  namespace: game
+  labels:
+    app: squirrel-core
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: squirrel-core
+  template:
+    metadata:
+      labels:
+        app: squirrel-core
+    spec:
+      containers:
+        - name: squirrel-core
+          image: registry.gitlab.com/USERNAME/PROJECT:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: RUST_LOG
+              value: info
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
