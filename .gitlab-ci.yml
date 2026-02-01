@@ -5,6 +5,7 @@ variables:
 
 stages:
   - build
+  - deploy
 
 build-image:
   stage: build
@@ -14,3 +15,11 @@ build-image:
     - docker build -f ./etc/Dockerfile -t $IMAGE:$CI_COMMIT_SHA -t $IMAGE:latest .
     - docker push $IMAGE:$CI_COMMIT_SHA
     - docker push $IMAGE:latest
+
+deploy:
+  stage: deploy
+  script:
+    - kubectl version --short
+    - kubectl get deploy -n game
+    - kubectl rollout restart deployment/squirrel-core -n game
+    - kubectl rollout status deployment/squirrel-core -n game --timeout=180s || true

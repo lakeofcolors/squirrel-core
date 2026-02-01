@@ -18,35 +18,18 @@ spec:
       labels:
         app: squirrel-core
     spec:
+      imagePullSecrets:
+        - name: gitlab-registry
       containers:
         - name: squirrel-core
-          image: gitlab.lakeofcolors.com/squirrel/squirrel-core:latest
+          image: registry.lakeofcolors.com/squirrel/squirrel-core:latest
           ports:
             - containerPort: 9221
 
-          # ENV VARS
-          # envFrom:
-          #   - secretRef:
-          #       name: squirrel-secrets
-          #   - configMapRef:
-          #       name: squirrel-config
+          envFrom:
+            - secretRef:
+                name: squirrel-secrets
 
-          # 📈 HEALTHCHECKS
-          # readinessProbe:
-          #   httpGet:
-          #     path: /me
-          #     port: 9221
-          #   initialDelaySeconds: 5
-          #   periodSeconds: 5
-
-          # livenessProbe:
-          #   httpGet:
-          #     path: /me
-          #     port: 9221
-          #   initialDelaySeconds: 15
-          #   periodSeconds: 10
-
-          # RESOURCE LIMITS
           resources:
             requests:
               cpu: "100m"

@@ -3,16 +3,24 @@ kind: Ingress
 metadata:
   name: squirrel-core
   namespace: game
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.lakeofcolors.com
+    secretName: squirrel-core-tls
   rules:
-    - host: api.lakeofcolors.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: squirrel-core
-                port:
-                  number: 80
+  - host: api.lakeofcolors.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: squirrel-core
+            port:
+              number: 80
