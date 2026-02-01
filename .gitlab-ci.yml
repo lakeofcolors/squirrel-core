@@ -19,7 +19,6 @@ build-image:
 deploy:
   stage: deploy
   script:
-    - kubectl version --short
     - kubectl get deploy -n game
     - kubectl rollout restart deployment/squirrel-core -n game
     - kubectl rollout status deployment/squirrel-core -n game --timeout=180s || true
