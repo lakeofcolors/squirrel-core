@@ -25,11 +25,11 @@ spec:
             - containerPort: 9221
 
           # ENV VARS
-          envFrom:
-            - secretRef:
-                name: squirrel-secrets
-            - configMapRef:
-                name: squirrel-config
+          # envFrom:
+          #   - secretRef:
+          #       name: squirrel-secrets
+          #   - configMapRef:
+          #       name: squirrel-config
 
           # 📈 HEALTHCHECKS
           # readinessProbe:
