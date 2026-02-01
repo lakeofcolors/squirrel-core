@@ -1,4 +1,4 @@
-FROM rust:1.86.0-slim AS base
+FROM rust:1.88.0-slim AS base
 
 RUN apt-get update && apt-get install -y pkg-config libssl-dev build-essential clang lld
 RUN cargo install sqlx-cli --no-default-features --features postgres
