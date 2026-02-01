@@ -9,7 +9,7 @@ spec:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
-      maxUnavailable: 0   # 💥 zero-downtime
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: squirrel-core
@@ -24,7 +24,7 @@ spec:
           ports:
             - containerPort: 9221
 
-          # 🔐 ENV VARS
+          # ENV VARS
           envFrom:
             - secretRef:
                 name: squirrel-secrets
@@ -32,21 +32,21 @@ spec:
                 name: squirrel-config
 
           # 📈 HEALTHCHECKS
-          readinessProbe:
-            httpGet:
-              path: /me
-              port: 9221
-            initialDelaySeconds: 5
-            periodSeconds: 5
+          # readinessProbe:
+          #   httpGet:
+          #     path: /me
+          #     port: 9221
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 5
 
-          livenessProbe:
-            httpGet:
-              path: /me
-              port: 9221
-            initialDelaySeconds: 15
-            periodSeconds: 10
+          # livenessProbe:
+          #   httpGet:
+          #     path: /me
+          #     port: 9221
+          #   initialDelaySeconds: 15
+          #   periodSeconds: 10
 
-          # 🧠 RESOURCE LIMITS
+          # RESOURCE LIMITS
           resources:
             requests:
               cpu: "100m"

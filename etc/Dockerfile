@@ -1,4 +1,3 @@
-# ---------- build ----------
 FROM rust:1.88.0-slim AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -7,34 +6,35 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     clang \
     lld \
-    ca-certificates
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml .
+COPY Cargo.lock .
 COPY src ./src
 COPY .sqlx .sqlx
 COPY migrations ./migrations
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release
+    cargo build --release && \
+    cp /app/target/release/squirrel-core /app/squirrel-core
 
-# ---------- runtime ----------
-FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y \
-    libssl3 \
-    ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/squirrel-core /app/squirrel-core
+COPY --from=builder /app/squirrel-core /app/squirrel-core
+
+EXPOSE 9221
 
 ENV RUST_BACKTRACE=1
-EXPOSE 8080
-
-USER nobody
+ENV RUST_LOG=info
 
 CMD ["./squirrel-core"]
