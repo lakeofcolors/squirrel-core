@@ -1,5 +1,6 @@
 variables:
   DOCKER_TLS_CERTDIR: ""
+  DOCKER_BUILDKIT: "1"
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
 stages:
