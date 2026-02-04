@@ -16,6 +16,7 @@ build-image:
     - docker build -f ./etc/Dockerfile.migrations -t $IMAGE-migrations:$CI_COMMIT_SHA -t $IMAGE-migrations:latest .
     - docker push $IMAGE:$CI_COMMIT_SHA
     - docker push $IMAGE:latest
+    - docker push $IMAGE-maigrations:latest
 
 migrate:
   stage: migrate
