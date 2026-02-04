@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: squirrel-migrations
+  namespace: game
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: migrate
+          image: registry.lakeofcolors.com/squirrel/squirrel-core-migrations:latest
+          envFrom:
+            - secretRef:
+                name: squirrel-secrets
