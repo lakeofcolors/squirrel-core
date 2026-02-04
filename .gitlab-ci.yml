@@ -14,10 +14,10 @@ build-image:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
 
     - docker build -f ./etc/Dockerfile -t $IMAGE:$CI_COMMIT_SHA -t $IMAGE:latest .
-    - docker build -f ./etc/Dockerfile.migrations -t $IMAGE-migrations:$CI_COMMIT_SHA -t $IMAGE-migrations:latest .
+    - docker build -f ./etc/Dockerfile.migrations -t $IMAGE:migrations .
     - docker push $IMAGE:$CI_COMMIT_SHA
     - docker push $IMAGE:latest
-    - docker push $IMAGE-migrations:latest
+    - docker push $IMAGE:migrations
 
 migrate:
   stage: migrate
