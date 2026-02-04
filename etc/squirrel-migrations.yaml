@@ -12,7 +12,7 @@ spec:
         - name: gitlab-registry
       containers:
         - name: migrate
-          image: registry.lakeofcolors.com/squirrel/squirrel-core-migrations:latest
+          image: registry.lakeofcolors.com/squirrel/squirrel-core:migrations
           envFrom:
             - secretRef:
                 name: squirrel-secrets
