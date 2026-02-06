@@ -6,9 +6,8 @@ use axum::extract::ws::Message;
 use std::sync::Arc;
 use std::time::{UNIX_EPOCH, SystemTime};
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::error;
 use futures_util::SinkExt;
-use futures_util::Sink;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {

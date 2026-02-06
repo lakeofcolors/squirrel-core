@@ -2,7 +2,7 @@ use hmac::{Hmac, Mac};
 use sha2::{Sha256, Digest};
 use serde::Deserialize;
 use std::collections::{BTreeMap};
-use tracing::{info, warn, error};
+use tracing::info;
 use url::form_urlencoded;
 use hex;
 

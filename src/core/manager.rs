@@ -1,13 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use tokio::sync::Mutex;
 use once_cell::sync::Lazy;
 use uuid::Uuid;
 use crate::utils::schemas::{GameState, PlayerPosition, Suit, WSEvent};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 use std::time::{Instant, Duration};
-use crate::core::context::get_global_context;
 use tokio::task;
 use futures_util::FutureExt;
 
