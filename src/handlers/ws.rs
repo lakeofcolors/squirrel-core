@@ -29,6 +29,7 @@ pub async fn ws_handler(
         None => None,
     };
 
+    info!("protocols: {:?}", protocols);
     let token = match protocols
         .and_then(|p| p.split(',').map(|s| s.trim()).nth(1))
     {
@@ -36,6 +37,7 @@ pub async fn ws_handler(
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
+    info!("token: {:?}", token);
     let username = match validate_token(token){
         Ok(claims) => {
             claims.sub
@@ -60,6 +62,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
             PlayerSession::new(username.clone(), tx)
         )
     );
+    info!("{} connected to pool", &username.clone());
 
     // Спавним отправку сообщений
     let write_loop = write_arc.clone();
