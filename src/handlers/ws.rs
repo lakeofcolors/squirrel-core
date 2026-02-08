@@ -1,4 +1,3 @@
-// src/handlers/ws.rs — финальный GameManager вариант
 use axum::{
     http::{StatusCode, HeaderMap},
     response::IntoResponse,
@@ -14,8 +13,8 @@ use tracing::{info, warn};
 use crate::{
     core::context::AppContext,
     core::pool::{PlayerSession},
-    utils::schemas::{Card, Rank, Suit, PlayerPosition, WSIncomingMessage, SubOrUnsub, WSEvent, WSCardPlayed, WSGameOver, WSTrickWon, WSYourHand, WSYourTurn},
-    utils::jwt::{handle_auth, validate_token},
+    utils::schemas::{QueueCommand, QueueKey, Card, Rank, Suit, PlayerPosition, WSIncomingMessage, WSEvent, WSCardPlayed, WSTrickWon, WSYourHand, WSYourTurn},
+    utils::jwt::{validate_token},
 };
 
 
@@ -29,7 +28,6 @@ pub async fn ws_handler(
         None => None,
     };
 
-    info!("protocols: {:?}", protocols);
     let token = match protocols
         .and_then(|p| p.split(',').map(|s| s.trim()).nth(1))
     {
@@ -37,7 +35,6 @@ pub async fn ws_handler(
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
-    info!("token: {:?}", token);
     let username = match validate_token(token){
         Ok(claims) => {
             claims.sub
@@ -55,13 +52,13 @@ pub async fn ws_handler(
 async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: String) {
     let (write, mut read) = socket.split();
     let write_arc = Arc::new(Mutex::new(write));
+
+    // NOTE mb mpsc::channel?
     let (tx, mut rx): (UnboundedSender<WSEvent>, UnboundedReceiver<WSEvent>) = mpsc::unbounded_channel();
     let connection_pool = app_ctx.connection_pool();
-    connection_pool.pool(
-        Arc::new(
-            PlayerSession::new(username.clone(), tx)
-        )
-    );
+    connection_pool.pool(&username.clone(), tx);
+    let session = connection_pool.get(&username).unwrap();
+
     info!("{} connected to pool", &username.clone());
 
     // Спавним отправку сообщений
@@ -96,45 +93,35 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                     }
                 };
 
-                // match incoming {
-                //     WSIncomingMessage::Auth(auth_msg) => {
-                //         if let Some(uid) = handle_auth(auth_msg, &write_arc).await {
-                //             client_uid = Some(uid.clone());
-                //             info!("User {uid} authenticated");
+                match incoming {
+                    WSIncomingMessage::FindGame{stake, currency, league} => {
+                        let _ = app_ctx.queue_manager.send(
+                            QueueCommand::Enqueue{
+                                player: username.clone(),
+                                key: QueueKey{
+                                    stake,
+                                    currency,
+                                    league
+                                }
+                            }
+                        );
+                        session.mark_as_in_queue();
+                    }
 
-                //             if let Some(existing_player) = gm.find_player_by_uid(&uid).await {
-                //                 let mut player_guard = existing_player.lock().await;
-                //                 player_guard.sender = tx.clone();
-                //                 player_guard.mark_as_connected();
-                //             }
-                //         } else {
-                //             let _ = write_arc.lock().await.send(Message::Text("AuthFailed".into())).await;
-                //             break;
-                //         }
-                //     }
-
-                //     WSIncomingMessage::Manage(SubOrUnsub::FindGame(_)) => {
-                //         if let Some(uid) = &client_uid {
-                //             let player = PlayerSession::new(uid.clone(), tx.clone());
-                //             gm.join(player.clone()).await;
-
-                //             let rooms = gm.active_rooms.lock().await;
-                //             for room in rooms.values() {
-                //                 let state = room.state.lock().await;
-                //                 for (pos, session) in &room.players {
-                //                     let session = session.lock().await;
-                //                     if let Some(hand) = state.hands.get(pos) {
-                //                         let _ = session.sender.send(WSEvent::YourHand(WSYourHand {
-                //                             cards: hand.clone(),
-                //                         }));
-                //                         if state.current_turn == *pos {
-                //                             let _ = session.sender.send(WSEvent::YourTurn(WSYourTurn));
-                //                         }
-                //                     }
-                //                 }
-                //             }
-                //         }
-                //     }
+                    WSIncomingMessage::CancelSearch{stake, currency, league} => {
+                         let _ = app_ctx.queue_manager.send(
+                            QueueCommand::Dequeue{
+                                player: username.clone(),
+                                key: QueueKey{
+                                    stake,
+                                    currency,
+                                    league
+                                }
+                            }
+                        );
+                        session.mark_as_connected();
+                    }
+                }
 
                 //     WSIncomingMessage::Manage(SubOrUnsub::PlayCard(card)) => {
                 //         if let Some(uid) = &client_uid {

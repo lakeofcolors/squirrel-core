@@ -1,9 +1,77 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Instant;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use rust_decimal::Decimal;
 
 // use crate::core::engine::GameEngine;
+
+pub type Hash = String;
+pub type RoomId = String;
+pub type PlayerId = String;
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Currency {
+    RealMoney,
+    Virtual,
+}
+
+pub enum RoomKind {
+    Private,
+    Open,
+    Queue,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum League {
+    Bronze,
+    Silver,
+    Gold,
+    Diamond,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct QueueKey {
+    pub stake: Decimal,
+    pub currency: Currency,
+    pub league: League
+}
+
+pub enum QueueCommand {
+    Enqueue {
+        player: PlayerId,
+        key: QueueKey,
+    },
+    Dequeue {
+        player: PlayerId,
+        key: QueueKey,
+    },
+    Disconnect {
+        player: PlayerId,
+    },
+}
+
+pub enum RoomCommand {
+     Create {
+         key: QueueKey,
+         players: Vec<PlayerId>
+    },
+}
+
+
+pub struct Room {
+    pub id: RoomId,
+    pub kind: RoomKind,
+    pub key: QueueKey,
+    pub players: Vec<PlayerId>,
+    pub password_hash: Option<Hash>,
+    pub created_at: Instant,
+}
+
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Suit {
@@ -269,7 +337,7 @@ pub enum WSEvent {
     YourTurn(WSYourTurn),
     CardPlayed(WSCardPlayed),
     TrickWon(WSTrickWon),
-    GameOver(WSGameOver),
+    GameOver{scores: HashMap<u8, u16>}, // team_id -> score
     Error{detail: String},
 }
 
@@ -293,35 +361,19 @@ pub struct WSTrickWon {
     pub position: PlayerPosition,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WSGameOver {
-    pub scores: HashMap<u8, u32>, // team_id -> score
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize, Hash)]
-pub struct Auth {
-    pub token: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SubManageMsg {
     pub rank: Option<String>,
     pub suit: Option<String>,
-    pub room_id: Option<String>, // можно будет использовать для наблюдения
 }
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
-pub enum SubOrUnsub {
-    FindGame(SubManageMsg),
-    PlayCard(SubManageMsg),
-    Sub(SubManageMsg),
-    UnSub(SubManageMsg),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
 pub enum WSIncomingMessage {
-    Manage(SubOrUnsub),
-    Auth(Auth),
+    FindGame{stake: Decimal, currency: Currency, league: League},
+    CancelSearch{stake: Decimal, currency: Currency, league: League},
+    // PlayCard(SubManageMsg),
+    // Sub{room_id: RoomId},
+    // UnSub{room_id: RoomId},
 }

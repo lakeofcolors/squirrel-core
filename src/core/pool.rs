@@ -12,10 +12,10 @@ pub enum PlayerStatus {
     InGame { room_id: String, position: PlayerPosition },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PlayerSession {
     pub username: String,
-    pub sender: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<WSEvent>>>>,
+    pub sender: Mutex<Option<tokio::sync::mpsc::UnboundedSender<WSEvent>>>,
     pub status: Arc<RwLock<PlayerStatus>>,
     pub last_ping: Arc<Mutex<Instant>>,
 }
@@ -30,17 +30,20 @@ impl PlayerSession{
     pub fn new(username: String, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> Self {
         Self{
             username,
-            sender: Arc::new(Mutex::new(Some(sender))),
+            sender: Mutex::new(Some(sender)),
             status: Arc::new(RwLock::new(PlayerStatus::Connected)),
             last_ping: Arc::new(Mutex::new(Instant::now()))
         }
     }
 
-    fn mark_as_disconnected(&self){
+    pub fn mark_as_disconnected(&self){
         *self.status.write().unwrap() = PlayerStatus::Disconnected;
     }
-    fn mark_as_connected(&self){
+    pub fn mark_as_connected(&self){
         *self.status.write().unwrap() = PlayerStatus::Connected;
+    }
+    pub fn mark_as_in_queue(&self){
+        *self.status.write().unwrap() = PlayerStatus::InQueue;
     }
     fn clear_sender(&self) {
         *self.sender.lock().unwrap() = None;
@@ -66,14 +69,14 @@ impl ConnectionPool{
         self.players.get(username).map(|p| p.value().clone())
     }
 
-    pub fn pool(&self, player: Arc<PlayerSession>){
-        if let Some(existing_player) = self.get(&player.username) {
-            existing_player.mark_as_connected();
-            let new_sender = player.sender.lock().unwrap().clone().expect("ws sender not found");
-            existing_player.update_sender(new_sender);
-        }else{
-            self.players.insert(player.username.clone(), player);
-        }
+    pub fn pool(&self, username: &str, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
+        self.players
+            .entry(username.clone().to_string())
+            .and_modify(|p| {
+                p.mark_as_connected();
+                p.update_sender(sender.clone());
+            })
+            .or_insert_with(|| Arc::new(PlayerSession::new(username.to_string(), sender)));
     }
 
     pub fn disconnect(&self, username: &str){
@@ -89,12 +92,18 @@ impl ConnectionPool{
 
     pub fn clean_inactive(&self, timeout: Duration){
         let now = Instant::now();
-        let mut to_remove: Vec<PlayerSession> = Vec::new();
+        let mut to_remove: Vec<String> = Vec::new();
 
         for entry in self.players.iter() {
             let player = entry.value();
-            let last_ping_guard = player.last_ping.lock();
-            // NOTE to be continue...
+            let last_ping_guard = player.last_ping.lock().unwrap();
+            if now.duration_since(*last_ping_guard) >= timeout {
+                to_remove.push(player.username.clone())
+            }
+        }
+
+        for username in &to_remove {
+            self.remove(username);
         }
     }
 
@@ -118,18 +127,19 @@ mod tests {
     }
 
     #[fixture]
-    fn sample_player(dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> Arc<PlayerSession> {
-        Arc::new(PlayerSession {
-            username: "kagura8me".to_string(),
-            sender: Arc::new(Mutex::new(Some(dummy_sender))),
-            status: Arc::new(RwLock::new(PlayerStatus::Connected)),
-            last_ping: Arc::new(Mutex::new(Instant::now())),
-        })
+    fn sample_player_name() -> String {
+        "kagura8me".to_string()
+    }
+
+
+    #[fixture]
+    fn sample_player(sample_player_name: String, dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> Arc<PlayerSession> {
+        Arc::new(PlayerSession::new(sample_player_name, dummy_sender))
     }
 
     #[fixture]
-    fn pool_with_player(empty_pool: ConnectionPool, sample_player: Arc<PlayerSession>) -> ConnectionPool {
-        empty_pool.pool(sample_player);
+    fn pool_with_player(empty_pool: ConnectionPool, sample_player_name: String, dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> ConnectionPool {
+        empty_pool.pool(&sample_player_name, dummy_sender);
         empty_pool
     }
 
@@ -158,5 +168,12 @@ mod tests {
         assert!(nothing.is_none())
     }
 
-
+    #[rstest]
+    fn test_pool_clean_inactive(pool_with_player: ConnectionPool, dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
+        pool_with_player.pool("inactive1", dummy_sender);
+        let p = pool_with_player.get("inactive1").unwrap();
+        *p.last_ping.lock().unwrap() = Instant::now() - Duration::from_secs(10*60);
+        pool_with_player.clean_inactive(Duration::from_secs(5*60));
+        assert!(pool_with_player.players.len() == 1);
+    }
 }

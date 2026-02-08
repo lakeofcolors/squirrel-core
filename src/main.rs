@@ -6,7 +6,7 @@ use axum::{
 };
 use tracing::info;
 use tracing_subscriber;
-use crate::core::context::{AppContext, set_global_context};
+use crate::core::{context::{AppContext, set_global_context}, engine::start_room_manager};
 // use crate::utils::jwt::handle_auth;
 use crate::handlers::auth::{telegram_login, me};
 use crate::handlers::ws::ws_handler;
@@ -18,6 +18,7 @@ use std::sync::Arc;
 use tower_http::cors::{CorsLayer, Any};
 use axum::http::{Method, HeaderName};
 use tower_http::trace::TraceLayer;
+use core::engine::start_queue_manager;
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +29,15 @@ async fn main() {
     info!("Logical cores: {}", num_cpus::get());
     info!("Physical cores: {}", num_cpus::get_physical());
 
-    let app_ctx = Arc::new(AppContext::new());
+    let room_manager_writter = start_room_manager();
+    let queue_manager_writter = start_queue_manager(room_manager_writter.clone());
+
+    let app_ctx = Arc::new(
+        AppContext::new(
+            room_manager_writter,
+            queue_manager_writter
+        )
+    );
     let pg_pool = Arc::new(pg_pool().await.expect(""));
     set_global_context(app_ctx.clone());
 
