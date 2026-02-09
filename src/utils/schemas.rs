@@ -19,6 +19,7 @@ pub enum Currency {
     Virtual,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RoomKind {
     Private,
     Open,
@@ -34,7 +35,7 @@ pub enum League {
     Diamond,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct QueueKey {
     pub stake: Decimal,
     pub currency: Currency,
@@ -55,21 +56,33 @@ pub enum QueueCommand {
     },
 }
 
-pub enum RoomCommand {
-     Create {
-         key: QueueKey,
-         players: Vec<PlayerId>
+pub enum RoomManagerCommand {
+    Create {
+        key: QueueKey,
+        players: Vec<PlayerId>,
+        password_hash: Option<Hash>,
+        kind: RoomKind
     },
+    List{
+        player: PlayerId
+    }
 }
 
 
+#[derive(Debug, Clone)]
 pub struct Room {
-    pub id: RoomId,
-    pub kind: RoomKind,
-    pub key: QueueKey,
-    pub players: Vec<PlayerId>,
+    pub meta: RoomMeta,
     pub password_hash: Option<Hash>,
     pub created_at: Instant,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomMeta{
+    pub id: RoomId,
+    pub key: QueueKey,
+    pub kind: RoomKind,
+    pub players: Vec<PlayerId>,
+
 }
 
 
@@ -328,6 +341,7 @@ impl GameState {
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum WSEvent {
     PlayerDisconnected{ position: PlayerPosition },
+    RoomList{ items: Vec<RoomMeta> },
     SuccessLogin{ username: String },
     GameStart { room_id: String, position: PlayerPosition },
     GameClose{reason: String},
@@ -373,6 +387,8 @@ pub struct SubManageMsg {
 pub enum WSIncomingMessage {
     FindGame{stake: Decimal, currency: Currency, league: League},
     CancelSearch{stake: Decimal, currency: Currency, league: League},
+    CreateRoom{stake: Decimal, currency: Currency, league: League, password_hash: Option<Hash>},
+    RoomsList,
     // PlayCard(SubManageMsg),
     // Sub{room_id: RoomId},
     // UnSub{room_id: RoomId},

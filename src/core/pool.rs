@@ -35,7 +35,14 @@ impl PlayerSession{
             last_ping: Arc::new(Mutex::new(Instant::now()))
         }
     }
-
+    pub fn send(&self, event: WSEvent) {
+        if let Some(tx) = self.sender.lock().unwrap().as_ref() {
+            let _ = tx.send(event);
+        }
+    }
+    pub fn mark_as_in_game(&self, room_id: String, position: PlayerPosition){
+        *self.status.write().unwrap() = PlayerStatus::InGame { room_id, position }
+    }
     pub fn mark_as_disconnected(&self){
         *self.status.write().unwrap() = PlayerStatus::Disconnected;
     }
@@ -67,6 +74,12 @@ impl ConnectionPool{
 
     pub fn get(&self, username: &str) -> Option<Arc<PlayerSession>>{
         self.players.get(username).map(|p| p.value().clone())
+    }
+
+    pub fn send_to(&self, username: &str, event: WSEvent){
+        if let Some(player) = self.get(username){
+            player.send(event);
+        }
     }
 
     pub fn pool(&self, username: &str, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){

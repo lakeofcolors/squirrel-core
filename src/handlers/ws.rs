@@ -13,8 +13,8 @@ use tracing::{info, warn};
 use crate::{
     core::context::AppContext,
     core::pool::{PlayerSession},
-    utils::schemas::{QueueCommand, QueueKey, Card, Rank, Suit, PlayerPosition, WSIncomingMessage, WSEvent, WSCardPlayed, WSTrickWon, WSYourHand, WSYourTurn},
-    utils::jwt::{validate_token},
+    utils::schemas::{QueueCommand, QueueKey, Card, Rank, Suit, PlayerPosition, WSIncomingMessage, WSEvent, WSCardPlayed, WSTrickWon, WSYourHand, WSYourTurn, RoomKind},
+    utils::{jwt::{validate_token}, schemas::RoomManagerCommand},
 };
 
 
@@ -120,6 +120,23 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                             }
                         );
                         session.mark_as_connected();
+                    }
+
+                    WSIncomingMessage::CreateRoom { stake, currency, league, password_hash} => {
+                        let _ = app_ctx.room_manager.send(
+                            RoomManagerCommand::Create {
+                                key: QueueKey { stake, currency, league },
+                                players: Vec::from([username.clone()]),
+                                password_hash: password_hash.clone(),
+                                kind: match password_hash{
+                                    Some(_) => RoomKind::Private,
+                                    None => RoomKind::Open
+                                }
+                            }
+                        );
+                    }
+                    WSIncomingMessage::RoomsList => {
+
                     }
                 }
 

@@ -2,12 +2,12 @@ use crate::core::pool::ConnectionPool;
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::utils::schemas::{RoomCommand, QueueCommand};
+use crate::utils::schemas::{RoomManagerCommand, QueueCommand};
 
 #[derive(Debug)]
 pub struct AppContext{
     connection_pool: Arc<ConnectionPool>,
-    pub room_manager: mpsc::UnboundedSender<RoomCommand>,
+    pub room_manager: mpsc::UnboundedSender<RoomManagerCommand>,
     pub queue_manager: mpsc::UnboundedSender<QueueCommand>,
 }
 
@@ -23,7 +23,7 @@ pub fn get_global_context() -> Arc<AppContext> {
 
 impl AppContext {
     pub fn new(
-        room_manager: mpsc::UnboundedSender<RoomCommand>,
+        room_manager: mpsc::UnboundedSender<RoomManagerCommand>,
         queue_manager: mpsc::UnboundedSender<QueueCommand>,
     ) -> Self{
         Self{
