@@ -39,28 +39,33 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         while let Some(cmd) = rx.recv().await {
             match cmd {
                 RoomManagerCommand::CreateRoom { key, players, password_hash, kind } => {
-                   let room_id = Uuid::new_v4().to_string();
-                   rooms.entry(room_id.clone())
-                       .or_insert(
-                           Room{
-                               meta: RoomMeta{
-                                   id: room_id.clone(),
-                                   name: room_id.clone(),
-                                   key,
-                                   players: players.clone(),
-                                   kind
-                               },
-                               password_hash,
-                               created_at: Instant::now()
-                           }
+                    let room_id = Uuid::new_v4().to_string();
+                    let room_meta = RoomMeta{
+                        id: room_id.clone(),
+                        name: room_id.clone(),
+                        key,
+                        players: players.clone(),
+                        kind
+                    };
+                    rooms.entry(room_id.clone())
+                         .or_insert(
+                             Room{
+                                 meta: room_meta.clone(),
+                                 password_hash,
+                                 created_at: Instant::now()
+                             }
                        );
-                   if players.len().eq(&4){
-                       start_room_actor(
-                           room_id,
-                           players,
-                           manager_tx.clone()
-                       )
-                   }
+                    app_ctx.connection_pool().broadcast(
+                        &room_subscribers,
+                        WSEvent::RoomCreated { room: room_meta }
+                    );
+                    if players.len().eq(&4){
+                        start_room_actor(
+                            room_id,
+                            players,
+                            manager_tx.clone()
+                        )
+                    }
                 }
                 RoomManagerCommand::JoinRoom { player, room_id } => {
                     if let Some(room) = rooms.get_mut(&room_id) {

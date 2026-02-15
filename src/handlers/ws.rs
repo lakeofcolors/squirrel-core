@@ -8,7 +8,7 @@ use futures_util::StreamExt;
 use futures_util::SinkExt;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, mpsc::{self, UnboundedReceiver, UnboundedSender}};
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 
 use crate::{
     core::context::AppContext,
@@ -296,6 +296,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
 
             Message::Pong(_) => {
                 // Обновляем last_ping и отвечаем Pong
+                debug!("pong from {}", username.clone());
                 if let Some(player) = connection_pool.get(&username.clone()) {
                     player.update_last_ping();
                 }

@@ -1,6 +1,6 @@
 use axum::{
     extract::{Json, State},
-    http::StatusCode,
+    http::{StatusCode, HeaderMap},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -29,7 +29,9 @@ pub struct MeRequest {
 
 #[derive(Serialize)]
 pub struct MeResponse {
+    pub id: u64,
     pub username: String,
+    pub photo_url: Option<String>,
     pub rating: u64,
 }
 
@@ -55,34 +57,28 @@ pub async fn telegram_login(
 
     match verify_telegram_auth(&payload.init_data, &bot_token) {
         Ok(init_data) => {
-            let telegram_id = init_data.user.id.to_string();
+            let telegram_id: i64 = init_data.user.id.try_into().unwrap();
             let username = init_data
                 .user
                 .username
                 .clone()
                 .unwrap_or(init_data.user.first_name.clone());
-
+            let photo_url = init_data.user.photo_url.clone();
             let user = sqlx::query!(
-                "INSERT INTO users (telegram_id, username)
-                VALUES ($1, $2)
-                ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username
+                "INSERT INTO users (telegram_id, username, photo_url)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username, photo_url = EXCLUDED.photo_url
                 RETURNING username",
                 telegram_id,
-                username
+                username,
+                photo_url,
             )
             .fetch_one(&*pool)
             .await;
 
-            let final_username = match user {
-                Ok(record) => record.username.unwrap_or_else(|| "anon".to_string()),
-                Err(err) => {
-                    error!("DB error: {:?}", err);
-                    panic!("DB error: {:?}", err);
-                }
-            };
             match (
-                generate_token(final_username.as_str(), Some(3600)),       // 1 hour
-                generate_token(final_username.as_str(), Some(7 * 24 * 3600)) // 7 days
+                generate_token(&telegram_id.to_string(), Some(3600)),       // 1 hour
+                generate_token(&telegram_id.to_string(), Some(7 * 24 * 3600)) // 7 days
             ) {
                 (Ok(access_token), Ok(refresh_token)) => {
                     let response = TokenResponse {
@@ -101,18 +97,58 @@ pub async fn telegram_login(
     }
 }
 
-pub async fn me(Json(payload): Json<MeRequest>) -> impl IntoResponse {
-    match validate_token(&payload.token) {
-        Ok(claims) => {
+pub async fn me(
+    State(pool): State<Arc<PgPool>>,
+    headers: HeaderMap
+) -> impl IntoResponse {
+    let auth_header = match headers.get("authorization") {
+        Some(value) => value,
+        None => return (StatusCode::UNAUTHORIZED, "Missing auth header").into_response(),
+    };
+
+    let auth_str = match auth_header.to_str() {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::UNAUTHORIZED, "Invalid auth header").into_response(),
+    };
+
+    let token = match auth_str.strip_prefix("Bearer ") {
+        Some(t) => t,
+        None => return (StatusCode::UNAUTHORIZED, "Invalid auth scheme").into_response(),
+    };
+
+    let claims = match validate_token(token) {
+        Ok(c) => c,
+        Err(err) => {
+            error!("Invalid token: {:?}", err);
+            return (StatusCode::UNAUTHORIZED, "Incorrect token").into_response()
+        }
+    };
+
+    let telegram_id: i64 = claims.sub.parse().unwrap();
+
+    let user = sqlx::query!(
+        "SELECT username, rating, photo_url FROM users WHERE telegram_id = $1",
+        telegram_id
+    )
+    .fetch_one(&*pool)
+    .await;
+
+    match user {
+        Ok(record) => {
             let response = MeResponse {
-                username: claims.sub,
-                rating: 99,
+                id: telegram_id.try_into().unwrap(),
+                username: record.username.unwrap_or_else(|| "anon".into()),
+                photo_url: record.photo_url,
+                rating: record.rating as u64,
             };
             (StatusCode::OK, Json(response)).into_response()
         }
         Err(err) => {
-            error!("Invalid token: {:?}", err);
-            (StatusCode::UNAUTHORIZED, "Incorrect token").into_response()
+            error!("DB error: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Database error"
+            ).into_response()
         }
     }
 }

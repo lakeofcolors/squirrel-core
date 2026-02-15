@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO users (telegram_id, username, photo_url)\n                VALUES ($1, $2, $3)\n                ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username, photo_url = EXCLUDED.photo_url\n                RETURNING username",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9eea54fee9e6f39255c24d4784ae7248a804b5d7461fd3d8cdbb48330cd18672"
+}

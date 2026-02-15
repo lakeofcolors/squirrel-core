@@ -48,8 +48,8 @@ async fn main() {
     let router = Router::new()
         .route("/v1/ws", get(ws_handler))
         .route("/auth/login", post(telegram_login))
+        .route("/auth/me", get(me))
         .with_state(pg_pool)
-        .route("/me", post(me))
         .layer(cors)
         .layer(Extension(app_ctx))
         .layer(TraceLayer::new_for_http());
