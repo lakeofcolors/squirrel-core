@@ -17,7 +17,7 @@ pub struct PlayerSession {
     pub username: String,
     pub sender: Mutex<Option<tokio::sync::mpsc::UnboundedSender<WSEvent>>>,
     pub status: Arc<RwLock<PlayerStatus>>,
-    pub last_ping: Arc<Mutex<Instant>>,
+    pub last_ping: Mutex<Instant>,
 }
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl PlayerSession{
             username,
             sender: Mutex::new(Some(sender)),
             status: Arc::new(RwLock::new(PlayerStatus::Connected)),
-            last_ping: Arc::new(Mutex::new(Instant::now()))
+            last_ping: Mutex::new(Instant::now())
         }
     }
     pub fn send(&self, event: WSEvent) {
@@ -82,9 +82,19 @@ impl ConnectionPool{
         }
     }
 
+    pub fn broadcast<I>(&self, players: I, event: WSEvent)
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
+        for player in players{
+            self.send_to(player.as_ref(), event.clone())
+        }
+    }
+
     pub fn pool(&self, username: &str, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
         self.players
-            .entry(username.clone().to_string())
+            .entry(username.to_string())
             .and_modify(|p| {
                 p.mark_as_connected();
                 p.update_sender(sender.clone());
@@ -103,24 +113,10 @@ impl ConnectionPool{
         self.players.remove(username);
     }
 
-    pub fn clean_inactive(&self, timeout: Duration){
-        let now = Instant::now();
-        let mut to_remove: Vec<String> = Vec::new();
-
-        for entry in self.players.iter() {
-            let player = entry.value();
-            let last_ping_guard = player.last_ping.lock().unwrap();
-            if now.duration_since(*last_ping_guard) >= timeout {
-                to_remove.push(player.username.clone())
-            }
-        }
-
-        for username in &to_remove {
-            self.remove(username);
-        }
-    }
-
 }
+
+
+
 
 
 #[cfg(test)]
@@ -181,12 +177,4 @@ mod tests {
         assert!(nothing.is_none())
     }
 
-    #[rstest]
-    fn test_pool_clean_inactive(pool_with_player: ConnectionPool, dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
-        pool_with_player.pool("inactive1", dummy_sender);
-        let p = pool_with_player.get("inactive1").unwrap();
-        *p.last_ping.lock().unwrap() = Instant::now() - Duration::from_secs(10*60);
-        pool_with_player.clean_inactive(Duration::from_secs(5*60));
-        assert!(pool_with_player.players.len() == 1);
-    }
 }

@@ -6,7 +6,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::Extension;
 use futures_util::StreamExt;
 use futures_util::SinkExt;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, mpsc::{self, UnboundedReceiver, UnboundedSender}};
 use tracing::{info, warn};
 
@@ -57,9 +57,9 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
     let (tx, mut rx): (UnboundedSender<WSEvent>, UnboundedReceiver<WSEvent>) = mpsc::unbounded_channel();
     let connection_pool = app_ctx.connection_pool();
     connection_pool.pool(&username.clone(), tx);
+    info!("{} connected to pool", &username.clone());
     let session = connection_pool.get(&username).unwrap();
 
-    info!("{} connected to pool", &username.clone());
 
     // Спавним отправку сообщений
     let write_loop = write_arc.clone();
@@ -76,6 +76,34 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
         }
     });
 
+    // Ping task
+    let ping_write = write_arc.clone();
+    let ping_pool = connection_pool.clone();
+    let ping_username = username.clone();
+
+    // NOTE tokio::select mb
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+        loop{
+            interval.tick().await;
+            if ping_write.lock().await.send(Message::Ping(vec![])).await.is_err(){
+                break;
+            }
+
+            if let Some(player) = ping_pool.get(&ping_username){
+                let last = *player.last_ping.lock().unwrap();
+                if last.elapsed() > Duration::from_secs(20) {
+                    ping_pool.remove(&ping_username);
+                    break;
+                }
+            }else{
+                break;
+            }
+        }
+    });
+
+    // Message handler
     while let Some(result) = read.next().await {
         let msg = match result {
             Ok(msg) => msg,
@@ -124,7 +152,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
 
                     WSIncomingMessage::CreateRoom { stake, currency, league, password_hash} => {
                         let _ = app_ctx.room_manager.send(
-                            RoomManagerCommand::Create {
+                            RoomManagerCommand::CreateRoom {
                                 key: QueueKey { stake, currency, league },
                                 players: Vec::from([username.clone()]),
                                 password_hash: password_hash.clone(),
@@ -135,9 +163,31 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                             }
                         );
                     }
-                    WSIncomingMessage::RoomsList => {
+                    WSIncomingMessage::JoinRoom { room_id } => {
+                        let _ = app_ctx.room_manager.send(
+                            RoomManagerCommand::JoinRoom { player: username.clone(), room_id }
+                        );
+                    }
+                    WSIncomingMessage::LeaveRoom { room_id } => {
+                        let _ = app_ctx.room_manager.send(
+                            RoomManagerCommand::LeaveRoom { player: username.clone(), room_id }
+                        );
+                    }
+                    WSIncomingMessage::SubscribeRooms => {
+                        let _ = app_ctx.room_manager.send(
+                            RoomManagerCommand::SubscribeRooms { player: username.clone() }
+                        );
+                    }
+                    WSIncomingMessage::UnsubscribeRooms => {
+                        let _ = app_ctx.room_manager.send(
+                            RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
+                        );
+                    }
+                    WSIncomingMessage::PlayCard{ rank, suit } => {
 
                     }
+
+
                 }
 
                 //     WSIncomingMessage::Manage(SubOrUnsub::PlayCard(card)) => {
@@ -244,20 +294,11 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                 // }
             }
 
-            Message::Binary(data) => {
-                if data.as_ref() == vec![9] {
-                    if let Some(player) = connection_pool.get(&username.clone()) {
-                        player.update_last_ping();
-                    }
-                }
-            }
-
-            Message::Ping(payload) => {
+            Message::Pong(_) => {
                 // Обновляем last_ping и отвечаем Pong
                 if let Some(player) = connection_pool.get(&username.clone()) {
                     player.update_last_ping();
                 }
-                let _ = write_arc.lock().await.send(Message::Pong(payload)).await;
             }
 
             Message::Close(_) => break,

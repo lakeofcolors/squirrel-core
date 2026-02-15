@@ -28,7 +28,6 @@ async fn main() {
 
     info!("Logical cores: {}", num_cpus::get());
     info!("Physical cores: {}", num_cpus::get_physical());
-
     let room_manager_writter = start_room_manager();
     let queue_manager_writter = start_queue_manager(room_manager_writter.clone());
 
@@ -40,8 +39,6 @@ async fn main() {
     );
     let pg_pool = Arc::new(pg_pool().await.expect(""));
     set_global_context(app_ctx.clone());
-
-
 
     let cors = CorsLayer::new()
         .allow_origin(Any)

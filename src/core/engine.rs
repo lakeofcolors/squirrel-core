@@ -2,7 +2,6 @@ use tokio::{sync::mpsc, time::sleep};
 use std::{collections::{HashMap, VecDeque}, sync::Mutex, time::{Instant, Duration}};
 
 use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta}, core::context::get_global_context};
-use rust_decimal::Decimal;
 use tracing::info;
 use uuid::Uuid;
 
@@ -16,7 +15,7 @@ fn try_match(
             let players: Vec<PlayerId> =
                 (0..4).map(|_| queue.pop_front().unwrap()).collect();
 
-            let _ = room_tx.send(RoomManagerCommand::Create {
+            let _ = room_tx.send(RoomManagerCommand::CreateRoom {
                 key: key.clone(),
                 players,
                 password_hash: None,
@@ -35,15 +34,18 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         sleep(Duration::from_secs(2)).await; // NOTE for app_ctx init
         let app_ctx = get_global_context();
         let mut rooms: HashMap<RoomId, Room> = HashMap::new();
+        let mut room_subscribers: Vec<PlayerId> = Vec::new();
+
         while let Some(cmd) = rx.recv().await {
-           match cmd {
-               RoomManagerCommand::Create { key, players, password_hash, kind } => {
+            match cmd {
+                RoomManagerCommand::CreateRoom { key, players, password_hash, kind } => {
                    let room_id = Uuid::new_v4().to_string();
                    rooms.entry(room_id.clone())
                        .or_insert(
                            Room{
                                meta: RoomMeta{
                                    id: room_id.clone(),
+                                   name: room_id.clone(),
                                    key,
                                    players: players.clone(),
                                    kind
@@ -59,15 +61,67 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                            manager_tx.clone()
                        )
                    }
-               }
-               RoomManagerCommand::List{ player } => {
-                   let room_list: Vec<RoomMeta> = rooms
+                }
+                RoomManagerCommand::JoinRoom { player, room_id } => {
+                    if let Some(room) = rooms.get_mut(&room_id) {
+                        if room.meta.players.len() < 4 {
+                            room.meta.players.push(player.clone());
+
+                            app_ctx.connection_pool().broadcast(
+                                &room_subscribers,
+                                WSEvent::RoomUpdated {
+                                    room: room.meta.clone(),
+                                },
+                            );
+
+                            if room.meta.players.len() == 4 {
+                                start_room_actor(
+                                    room_id.clone(),
+                                    room.meta.players.clone(),
+                                    manager_tx.clone(),
+                                );
+                            }
+                        }
+                    }
+                }
+                RoomManagerCommand::LeaveRoom { player, room_id } => {
+                    if let Some(room) = rooms.get_mut(&room_id) {
+                        room.meta.players.retain(|p| p != &player);
+
+                        if room.meta.players.is_empty() {
+                            rooms.remove(&room_id);
+
+                            app_ctx.connection_pool().broadcast(
+                                &room_subscribers,
+                                WSEvent::RoomRemoved { room_id },
+                            );
+                        } else {
+                            app_ctx.connection_pool().broadcast(
+                                &room_subscribers,
+                                WSEvent::RoomUpdated {
+                                    room: room.meta.clone(),
+                                },
+                            );
+                        }
+                    }
+                }
+                RoomManagerCommand::SubscribeRooms{ player } => {
+                    if !room_subscribers.contains(&player) {
+                        room_subscribers.push(player.clone());
+                    }
+                   let snapshot: Vec<RoomMeta> = rooms
                        .values()
                        .filter(|room| room.meta.players.len() < 4)
                        .map(|room| room.meta.clone())
                        .collect();
 
-                   app_ctx.connection_pool().send_to(&player, WSEvent::RoomList { items: room_list })
+                   app_ctx.connection_pool().send_to(&player, WSEvent::RoomsSnapshot { items: snapshot })
+               }
+               RoomManagerCommand::UnsubscribeRooms { player } => {
+                   room_subscribers.retain(|p| p != &player);
+               }
+               RoomManagerCommand::FinishRoom { room_id } => {
+
                }
            }
         }

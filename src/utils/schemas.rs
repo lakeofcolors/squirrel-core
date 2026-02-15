@@ -9,6 +9,7 @@ use rust_decimal::Decimal;
 
 pub type Hash = String;
 pub type RoomId = String;
+pub type RoomName = String;
 pub type PlayerId = String;
 
 
@@ -57,15 +58,19 @@ pub enum QueueCommand {
 }
 
 pub enum RoomManagerCommand {
-    Create {
+    CreateRoom {
         key: QueueKey,
         players: Vec<PlayerId>,
         password_hash: Option<Hash>,
         kind: RoomKind
     },
-    List{
-        player: PlayerId
-    }
+    JoinRoom { player: PlayerId, room_id: RoomId },
+    LeaveRoom { player: PlayerId, room_id: RoomId },
+    FinishRoom{
+        room_id: RoomId
+    },
+    SubscribeRooms { player: PlayerId },
+    UnsubscribeRooms { player: PlayerId },
 }
 
 
@@ -79,6 +84,7 @@ pub struct Room {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomMeta{
     pub id: RoomId,
+    pub name: RoomName,
     pub key: QueueKey,
     pub kind: RoomKind,
     pub players: Vec<PlayerId>,
@@ -340,8 +346,12 @@ impl GameState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum WSEvent {
+    RoomsSnapshot{ items: Vec<RoomMeta> },
+    RoomCreated { room: RoomMeta },
+    RoomUpdated { room: RoomMeta },
+    RoomRemoved { room_id: RoomId },
+
     PlayerDisconnected{ position: PlayerPosition },
-    RoomList{ items: Vec<RoomMeta> },
     SuccessLogin{ username: String },
     GameStart { room_id: String, position: PlayerPosition },
     GameClose{reason: String},
@@ -388,8 +398,11 @@ pub enum WSIncomingMessage {
     FindGame{stake: Decimal, currency: Currency, league: League},
     CancelSearch{stake: Decimal, currency: Currency, league: League},
     CreateRoom{stake: Decimal, currency: Currency, league: League, password_hash: Option<Hash>},
-    RoomsList,
-    // PlayCard(SubManageMsg),
-    // Sub{room_id: RoomId},
-    // UnSub{room_id: RoomId},
+    JoinRoom { room_id: RoomId },
+    LeaveRoom { room_id: RoomId },
+    SubscribeRooms,
+    UnsubscribeRooms,
+    PlayCard{rank: String, suit: String},
+    // SubcribeRoom{room_id: RoomId},
+    // UnsubscribeRoom{room_id: RoomId},
 }
