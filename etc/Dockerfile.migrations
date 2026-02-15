@@ -15,5 +15,5 @@ WORKDIR /app
 COPY migrations ./migrations
 COPY .sqlx .sqlx
 
-CMD ["sqlx", "database", "reset"]
-# CMD ["sqlx", "migrate", "run"]
+# CMD ["sqlx", "database", "reset"]
+CMD ["sqlx", "migrate", "run"]

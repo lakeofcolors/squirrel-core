@@ -14,14 +14,15 @@ build-image:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
 
     - docker build -f ./etc/Dockerfile -t $IMAGE:$CI_COMMIT_SHA -t $IMAGE:latest .
-    - docker build -f ./etc/Dockerfile.migrations -t $IMAGE:migrations .
+    - docker build -f ./etc/Dockerfile.migrations -t $IMAGE:migrations-$CI_COMMIT_SHA .
     - docker push $IMAGE:$CI_COMMIT_SHA
     - docker push $IMAGE:latest
-    - docker push $IMAGE:migrations
+    - docker push $IMAGE:migrations-$CI_COMMIT_SHA
 
 migrate:
   stage: migrate
   script:
+    - sed -i "s|IMAGE_TAG|$CI_COMMIT_SHA|g" ./etc/squirrel-migrations.yaml
     - kubectl -n game delete job squirrel-migrations --ignore-not-found
     - kubectl apply -f ./etc/squirrel-migrations.yaml
     - kubectl -n game wait --for=condition=complete job/squirrel-migrations --timeout=120s
