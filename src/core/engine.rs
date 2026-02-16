@@ -37,9 +37,9 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         let mut room_subscribers: Vec<PlayerId> = Vec::new();
 
         while let Some(cmd) = rx.recv().await {
-            info!("cmd: {:?}", cmd);
-            info!("rooms: {:?}", rooms);
-            info!("subs: {:?}", room_subscribers);
+            info!("cmd before: {:?}", cmd);
+            info!("rooms before: {:?}", rooms);
+            info!("subs before : {:?}", room_subscribers);
             match cmd {
                 RoomManagerCommand::CreateRoom { key, players, password_hash, kind } => {
                     let room_id = Uuid::new_v4().to_string();
@@ -107,7 +107,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     if let Some(room) = rooms.get_mut(&room_id) {
                         if room.meta.players.len() < 4 {
                             if room.meta.players.contains(&player.clone()){
-                                return;
+                                continue;
                             }else{
                                 room.meta.players.push(player.clone());
                             }
@@ -169,6 +169,9 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
 
                }
            }
+
+        info!("rooms after: {:?}", rooms);
+        info!("subs  after: {:?}", room_subscribers);
         }
     });
     tx

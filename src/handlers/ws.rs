@@ -80,6 +80,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
     let ping_write = write_arc.clone();
     let ping_pool = connection_pool.clone();
     let ping_username = username.clone();
+    let ping_ctx = app_ctx.clone();
 
     // NOTE tokio::select mb
     tokio::spawn(async move {
@@ -87,18 +88,28 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
 
         loop{
             interval.tick().await;
-            if ping_write.lock().await.send(Message::Ping(vec![])).await.is_err(){
-                warn!("Ошибка отправки Ping в WebSocket");
-                break;
-            }
 
             if let Some(player) = ping_pool.get(&ping_username){
                 let last = *player.last_ping.lock().unwrap();
                 if last.elapsed() > Duration::from_secs(20) {
                     ping_pool.remove(&ping_username);
+                    let _ = ping_ctx.queue_manager.send(
+                        QueueCommand::Disconnect { player: ping_username.clone() }
+                    );
+                    let _ = ping_ctx.room_manager.send(
+                        RoomManagerCommand::LeaveAllRoom { player: ping_username.clone() }
+                    );
+                    let _ = ping_ctx.room_manager.send(
+                        RoomManagerCommand::UnsubscribeRooms { player: ping_username.clone() }
+                    );
                     break;
                 }
             }else{
+                break;
+            }
+
+            if ping_write.lock().await.send(Message::Ping(vec![])).await.is_err(){
+                warn!("Ошибка отправки Ping в WebSocket");
                 break;
             }
         }
@@ -311,6 +322,10 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                 let _ = app_ctx.room_manager.send(
                     RoomManagerCommand::LeaveAllRoom { player: username.clone() }
                 );
+                let _ = app_ctx.room_manager.send(
+                    RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
+                );
+
             },
 
             _ => {}
