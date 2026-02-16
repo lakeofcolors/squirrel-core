@@ -66,6 +66,7 @@ pub enum RoomManagerCommand {
     },
     JoinRoom { player: PlayerId, room_id: RoomId },
     LeaveRoom { player: PlayerId, room_id: RoomId },
+    LeaveAllRoom { player: PlayerId },
     FinishRoom{
         room_id: RoomId
     },

@@ -67,10 +67,47 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         )
                     }
                 }
+                RoomManagerCommand::LeaveAllRoom { player } => {
+                    let mut empty_room_ids: Vec<RoomId> = Vec::new();
+
+                    for (room_id, room) in rooms.iter_mut() {
+                        let was_in_room = room.meta.players.contains(&player);
+
+                        if !was_in_room {
+                            continue;
+                        }
+
+                        room.meta.players.retain(|p| p != &player);
+
+                        if room.meta.players.is_empty() {
+                            empty_room_ids.push(room_id.clone());
+                        } else {
+                            app_ctx.connection_pool().broadcast(
+                                &room_subscribers,
+                                WSEvent::RoomUpdated {
+                                    room: room.meta.clone(),
+                                },
+                            );
+                        }
+                    }
+
+                    for room_id in empty_room_ids {
+                        rooms.remove(&room_id);
+
+                        app_ctx.connection_pool().broadcast(
+                            &room_subscribers,
+                            WSEvent::RoomRemoved { room_id },
+                        );
+                    }
+                }
                 RoomManagerCommand::JoinRoom { player, room_id } => {
                     if let Some(room) = rooms.get_mut(&room_id) {
                         if room.meta.players.len() < 4 {
-                            room.meta.players.push(player.clone());
+                            if room.meta.players.contains(&player.clone()){
+                                return;
+                            }else{
+                                room.meta.players.push(player.clone());
+                            }
 
                             app_ctx.connection_pool().broadcast(
                                 &room_subscribers,

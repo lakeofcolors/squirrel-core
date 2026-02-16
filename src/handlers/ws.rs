@@ -88,6 +88,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
         loop{
             interval.tick().await;
             if ping_write.lock().await.send(Message::Ping(vec![])).await.is_err(){
+                warn!("Ошибка отправки Ping в WebSocket");
                 break;
             }
 
@@ -302,7 +303,15 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                 }
             }
 
-            Message::Close(_) => break,
+            Message::Close(_) => {
+                connection_pool.disconnect(&username.clone());
+                let _ = app_ctx.queue_manager.send(
+                    QueueCommand::Disconnect { player: username.clone() }
+                );
+                let _ = app_ctx.room_manager.send(
+                    RoomManagerCommand::LeaveAllRoom { player: username.clone() }
+                );
+            },
 
             _ => {}
         }
