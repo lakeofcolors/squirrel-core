@@ -37,6 +37,9 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         let mut room_subscribers: Vec<PlayerId> = Vec::new();
 
         while let Some(cmd) = rx.recv().await {
+            info!("cmd: {:?}", cmd);
+            info!("rooms: {:?}", rooms);
+            info!("subs: {:?}", room_subscribers);
             match cmd {
                 RoomManagerCommand::CreateRoom { key, players, password_hash, kind } => {
                     let room_id = Uuid::new_v4().to_string();

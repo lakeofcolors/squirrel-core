@@ -57,6 +57,7 @@ pub enum QueueCommand {
     },
 }
 
+#[derive(Debug)]
 pub enum RoomManagerCommand {
     CreateRoom {
         key: QueueKey,
