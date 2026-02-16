@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Instant, Duration};
 use dashmap::DashMap;
+use tracing::error;
 
 use crate::utils::schemas::{WSEvent, PlayerPosition};
 
@@ -35,9 +36,14 @@ impl PlayerSession{
             last_ping: Mutex::new(Instant::now())
         }
     }
-    pub fn send(&self, event: WSEvent) {
-        if let Some(tx) = self.sender.lock().unwrap().as_ref() {
-            let _ = tx.send(event);
+    pub fn send(&self, event: WSEvent) -> Result<(), ()> {
+        let sender = self.sender.lock().unwrap();
+
+        if let Some(tx) = sender.as_ref() {
+            tx.send(event).map_err(|_| ())?;
+            Ok(())
+        } else {
+            Err(())
         }
     }
     pub fn mark_as_in_game(&self, room_id: String, position: PlayerPosition){
@@ -78,7 +84,10 @@ impl ConnectionPool{
 
     pub fn send_to(&self, username: &str, event: WSEvent){
         if let Some(player) = self.get(username){
-            player.send(event);
+            if player.send(event.clone()).is_err() {
+                error!("Ошибка отправки {:?} и дисконнект", event.clone());
+                self.disconnect(username);
+            }
         }
     }
 
