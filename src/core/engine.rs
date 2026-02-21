@@ -1,10 +1,10 @@
 use tokio::{sync::mpsc, time::sleep};
 use std::{collections::{HashMap, VecDeque}, sync::Mutex, time::{Instant, Duration}};
 
-use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta}, core::context::get_global_context};
+use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta, PlayerPosition, GameState, Suit, RoomActorCommand}, core::context::get_global_context};
 use tracing::info;
 use uuid::Uuid;
-
+use bimap::BiMap;
 
 fn try_match(
     queues: &mut HashMap<QueueKey, VecDeque<PlayerId>>,
@@ -50,9 +50,10 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         players: players.clone(),
                         kind
                     };
-                    rooms.entry(room_id.clone())
+                    let room = rooms.entry(room_id.clone())
                          .or_insert(
                              Room{
+                                 actor: None,
                                  meta: room_meta.clone(),
                                  password_hash,
                                  created_at: Instant::now()
@@ -63,11 +64,12 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         WSEvent::RoomCreated { room: room_meta }
                     );
                     if players.len().eq(&4){
-                        start_room_actor(
+                        let room_actor = start_room_actor(
                             room_id,
                             players,
                             manager_tx.clone()
-                        )
+                        );
+                        room.actor = Some(room_actor);
                     }
                 }
                 RoomManagerCommand::LeaveAllRoom { player } => {
@@ -120,11 +122,12 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                             );
 
                             if room.meta.players.len() == 4 {
-                                start_room_actor(
+                                let room_actor = start_room_actor(
                                     room_id.clone(),
                                     room.meta.players.clone(),
                                     manager_tx.clone(),
                                 );
+                                room.actor = Some(room_actor)
                             }
                         }
                     }
@@ -166,6 +169,17 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                    room_subscribers.retain(|p| p != &player);
                }
                RoomManagerCommand::FinishRoom { room_id } => {
+                   rooms.remove(&room_id);
+                    app_ctx.connection_pool().broadcast(
+                        &room_subscribers,
+                        WSEvent::RoomRemoved { room_id },
+                    );
+               }
+               RoomManagerCommand::PlayCard { player, room_id, card } => {
+                    let room = rooms.get(&room_id).unwrap(); // NOTE handle unwrap
+                    let _ = room.actor.clone().unwrap().send(
+                        RoomActorCommand::PlayCard { player: player.clone(), card }
+                    );
 
                }
            }
@@ -181,36 +195,131 @@ fn start_room_actor(
     room_id: RoomId,
     players: Vec<PlayerId>,
     room_manager_tx: mpsc::UnboundedSender<RoomManagerCommand>,
-) {
+) -> mpsc::UnboundedSender<RoomActorCommand> {
+    let (tx, mut rx) = mpsc::unbounded_channel();
+
     tokio::spawn(async move {
-        let mut subs: Vec<mpsc::UnboundedSender<WSEvent>> = Vec::new();
-        let mut alive = true;
+        // let mut subs: Vec<mpsc::UnboundedSender<WSEvent>> = Vec::new();
+        let app_ctx = get_global_context();
+        let mut player_positions: BiMap<PlayerId, PlayerPosition> = BiMap::new();
+        let mut state = GameState::new(Suit::Clubs);
 
-        // while let Some(cmd) = rx.recv().await {
-        //     match cmd {
-        //         RoomCommand::Subscribe { ws, .. } => {
-        //             subs.push(ws);
-        //         }
 
-        //         RoomCommand::PlayCard { player, card } => {
-        //             // game logic here
-        //             for sub in &subs {
-        //                 let _ = sub.send(WSEvent::GameEvent(format!(
-        //                     "{player} played {card}"
-        //                 )));
-        //             }
-        //         }
-        //     }
+        for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
+            let player = players.get(i).unwrap().to_string();  // NOTE unwrap_or
+            player_positions.insert(player.clone(), *pos);
+            app_ctx.connection_pool().send_to(
+                &player,
+                WSEvent::GameStart { room_id: room_id.clone(), position: *pos }
+            );
+            app_ctx.connection_pool().send_to(
+                &player,
+                WSEvent::YourHand{cards: state.hands.get(pos).unwrap().to_vec()}
+            );
+            if state.current_turn == *pos {
+                app_ctx.connection_pool().send_to(
+                    &player,
+                    WSEvent::YourTurn
+                )
+            }
+        }
 
-        //     if !alive {
-        //         break;
-        //     }
-        // }
 
-        // let _ = room_manager_tx.send(
-        //     RoomManagerCommand::RoomFinished { room_id }
-        // );
+        while let Some(cmd) = rx.recv().await {
+            match cmd {
+                RoomActorCommand::PlayCard { player, card } => {
+                    let player_position = player_positions.get_by_left(&player.clone()).unwrap();
+                    match state.play_card(*player_position, card){
+                        Ok(_) => {
+                            app_ctx.connection_pool().broadcast(
+                                players.clone(),
+                                WSEvent::CardPlayed{position: *player_position, card}
+                            );
+                            if let Some(winner) = state.resolve_trick() {
+                                app_ctx.connection_pool().broadcast(
+                                    &players.clone(),
+                                    WSEvent::TrickWon{position: winner}
+                                );
+                                if state.hands.values().all(|h| h.is_empty()) {
+                                    let _ = state.update_eye_after_round();
+                                    let eye = state.team_eye.clone();
+                                    state.trump = Suit::random_suit(); // TODO dont know!!! trump_to_position
+                                    let _ = state.update_hands(); //
+
+                                    app_ctx.connection_pool().broadcast(
+                                        players.clone(),
+                                        WSEvent::EyeUpdated {
+                                            team_a: eye.get(&1).copied().unwrap_or(0),
+                                            team_b: eye.get(&2).copied().unwrap_or(0),
+                                        }
+                                    );
+
+                                    app_ctx.connection_pool().broadcast(
+                                        players.clone(),
+                                        WSEvent::TrumpUpdated { trump: state.trump.clone() }
+                                    );
+
+
+                                    for player in &players.clone() {
+                                        if let Some(pos) = player_positions.get_by_left(player) {
+                                            if let Some(hand) = state.hands.get(pos) {
+                                                let _ = app_ctx.connection_pool().send_to(
+                                                    &player.clone(),
+                                                    WSEvent::YourHand { cards: hand.clone() }
+                                                );
+                                                if state.current_turn == *pos {
+                                                    let _ = app_ctx.connection_pool().send_to(
+                                                        &player.clone(),
+                                                        WSEvent::YourTurn
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+
+
+                                    if eye.get(&1).copied().unwrap_or(0) >= 12 || eye.get(&2).copied().unwrap_or(0) >= 12 {
+                                        app_ctx.connection_pool().broadcast(
+                                            players.clone(),
+                                            WSEvent::GameOver {
+                                                scores: state.team_scores.clone()
+                                            }
+                                        );
+                                        break;
+                                    }
+                                } else {
+                                    let player = player_positions.get_by_right(&winner).unwrap();
+                                    app_ctx.connection_pool().send_to(
+                                        &player.clone(),
+                                        WSEvent::YourTurn
+                                    );
+                                }
+
+                            }else{
+                                let player = player_positions.get_by_right(&state.current_turn).unwrap();
+                                app_ctx.connection_pool().send_to(
+                                    &player.clone(),
+                                    WSEvent::YourTurn
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            app_ctx.connection_pool().send_to(
+                                &player.clone(),
+                                WSEvent::Error { detail: e.to_string() }
+                            )
+                        }
+                    }
+                }
+
+            };
+        }
+
+        let _ = room_manager_tx.send(
+            RoomManagerCommand::FinishRoom { room_id }
+        );
     });
+    tx
 }
 
 pub fn start_queue_manager(

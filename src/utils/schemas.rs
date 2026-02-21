@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use std::collections::HashMap;
 use std::time::Instant;
 use rand::seq::SliceRandom;
@@ -73,6 +74,12 @@ pub enum RoomManagerCommand {
     },
     SubscribeRooms { player: PlayerId },
     UnsubscribeRooms { player: PlayerId },
+
+    PlayCard{ player: PlayerId, room_id: RoomId, card: Card},
+}
+
+pub enum RoomActorCommand{
+    PlayCard{ player: PlayerId, card: Card},
 }
 
 
@@ -81,6 +88,7 @@ pub struct Room {
     pub meta: RoomMeta,
     pub password_hash: Option<Hash>,
     pub created_at: Instant,
+    pub actor: Option<mpsc::UnboundedSender<RoomActorCommand>>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +148,30 @@ impl Card {
             (Rank::Jack, false) => 2,
             _ => 0,
         }
+    }
+
+    pub fn build_from(rank: String, suit: String) -> Result<Self, &'static str>{
+        let card = Self{
+            rank: match rank.to_lowercase().as_str() {
+                "7" => Rank::Seven,
+                "8" => Rank::Eight,
+                "9" => Rank::Nine,
+                "10" => Rank::Ten,
+                "j" => Rank::Jack,
+                "q" => Rank::Queen,
+                "k" => Rank::King,
+                "a" => Rank::Ace,
+                _ => return Err("Invalid rank")
+            },
+            suit: match suit.to_lowercase().as_str() {
+                "c" => Suit::Clubs,
+                "d" => Suit::Diamonds,
+                "h" => Suit::Hearts,
+                "s" => Suit::Spades,
+                _ => return Err("Invalid suit")
+            }
+        };
+        Ok(card)
     }
 }
 
@@ -212,7 +244,7 @@ pub struct GameState {
     pub hands: HashMap<PlayerPosition, Vec<Card>>,
     pub trump: Suit,
     pub current_trick: Vec<(PlayerPosition, Card)>,
-    pub team_scores: HashMap<u8, u32>,
+    pub team_scores: HashMap<u8, u16>,
     pub team_eye: HashMap<u8, u32>,
     pub current_turn: PlayerPosition,
     pub is_first_round: bool,
@@ -328,10 +360,10 @@ impl GameState {
             }
         }).map(|(pos, _)| *pos).unwrap();
 
-        let trick_points: u32 = self
+        let trick_points: u16 = self
             .current_trick
             .iter()
-            .map(|(_, c)| c.points(trump) as u32)
+            .map(|(_, c)| c.points(trump) as u16)
             .sum();
 
         let team = winner.team();
@@ -357,24 +389,15 @@ pub enum WSEvent {
     SuccessLogin{ username: String },
     GameStart { room_id: String, position: PlayerPosition },
     GameClose{reason: String},
-    YourHand(WSYourHand),
+    YourHand{cards: Vec<Card>},
     EyeUpdated{ team_a: u32, team_b: u32 },
     TrumpUpdated{ trump: Suit },
-    YourTurn(WSYourTurn),
-    CardPlayed(WSCardPlayed),
-    TrickWon(WSTrickWon),
+    YourTurn,
+    CardPlayed{position: PlayerPosition, card: Card},
+    TrickWon{position: PlayerPosition},
     GameOver{scores: HashMap<u8, u16>}, // team_id -> score
     Error{detail: String},
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WSYourHand {
-    pub cards: Vec<Card>,
-}
-
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WSYourTurn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WSCardPlayed {
@@ -404,7 +427,7 @@ pub enum WSIncomingMessage {
     LeaveRoom { room_id: RoomId },
     SubscribeRooms,
     UnsubscribeRooms,
-    PlayCard{rank: String, suit: String},
+    PlayCard{room_id: RoomId, rank: String, suit: String},
     // SubcribeRoom{room_id: RoomId},
     // UnsubscribeRoom{room_id: RoomId},
 }

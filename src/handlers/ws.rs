@@ -8,12 +8,12 @@ use futures_util::StreamExt;
 use futures_util::SinkExt;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, mpsc::{self, UnboundedReceiver, UnboundedSender}};
-use tracing::{info, warn, debug};
+use tracing::{info, warn, debug, error};
 
 use crate::{
     core::context::AppContext,
     core::pool::{PlayerSession},
-    utils::schemas::{QueueCommand, QueueKey, Card, Rank, Suit, PlayerPosition, WSIncomingMessage, WSEvent, WSCardPlayed, WSTrickWon, WSYourHand, WSYourTurn, RoomKind},
+    utils::schemas::{QueueCommand, QueueKey, Card, Rank, Suit, PlayerPosition, WSIncomingMessage, WSEvent, WSCardPlayed, WSTrickWon, RoomKind},
     utils::{jwt::{validate_token}, schemas::RoomManagerCommand},
 };
 
@@ -195,8 +195,21 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
                             RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
                         );
                     }
-                    WSIncomingMessage::PlayCard{ rank, suit } => {
-
+                    WSIncomingMessage::PlayCard{ room_id, rank, suit } => {
+                        let card = match Card::build_from(rank, suit) {
+                            Ok(card) => {
+                                let _ = app_ctx.room_manager.send(
+                                    RoomManagerCommand::PlayCard {
+                                        player: username.clone(),
+                                        room_id,
+                                        card,
+                                    }
+                                );
+                            },
+                            Err(err_msg) => {
+                                error!("Player {} play card err: {}", username.clone(), err_msg);
+                            }
+                        };
                     }
 
 
