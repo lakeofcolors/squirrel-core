@@ -76,10 +76,12 @@ pub enum RoomManagerCommand {
     UnsubscribeRooms { player: PlayerId },
 
     PlayCard{ player: PlayerId, room_id: RoomId, card: Card},
+    PlayerDisconnected { player: PlayerId, room_id: RoomId },
 }
 
 pub enum RoomActorCommand{
     PlayCard{ player: PlayerId, card: Card},
+    PlayerDisconnected { player: PlayerId },
 }
 
 
@@ -130,26 +132,39 @@ pub enum Rank {
     Ace,
 }
 
+impl Rank {
+    fn power(&self) -> u8{
+        match self{
+            Rank::Ace => 7,
+            Rank::Ten => 6,
+            Rank::King => 5,
+            Rank::Queen => 4,
+            Rank::Nine => 3,
+            Rank::Eight => 2,
+            Rank::Seven => 1,
+            Rank::Jack => 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Card {
     pub suit: Suit,
     pub rank: Rank,
 }
 
+
 impl Card {
-    pub fn points(&self, trump: Suit) -> u8 {
-        match (self.rank, self.suit == trump) {
-            (Rank::Ace, _) => 11,
-            (Rank::Ten, _) => 10,
-            (Rank::King, _) => 4,
-            (Rank::Queen, _) => 3,
-            (Rank::Jack, true) => 20,
-            (Rank::Nine, true) => 14,
-            (Rank::Jack, false) => 2,
+    pub fn points(&self) -> u8 {
+        match self.rank {
+            Rank::Ace => 11,
+            Rank::Ten => 10,
+            Rank::King => 4,
+            Rank::Queen => 3,
+            Rank::Jack => 2,
             _ => 0,
         }
     }
-
     pub fn build_from(rank: String, suit: String) -> Result<Self, &'static str>{
         let card = Self{
             rank: match rank.to_lowercase().as_str() {
@@ -172,6 +187,20 @@ impl Card {
             }
         };
         Ok(card)
+    }
+    pub fn power(&self, lead: Suit, trump: Suit) -> u16{
+        if self.rank == Rank::Jack {
+            return 1000 + jack_priority(self.suit) as u16;
+        }
+
+        if self.suit == trump {
+            return 500 + self.rank.power() as u16;
+        }
+
+        if self.suit == lead {
+            return 100 + self.rank.power() as u16;
+        }
+        0
     }
 }
 
@@ -206,9 +235,9 @@ pub fn deal_cards() -> Vec<Vec<Card>> {
 pub fn jack_priority(suit: Suit) -> u8 {
     match suit {
         Suit::Clubs => 4,
-        Suit::Diamonds => 3,
+        Suit::Spades => 3,
         Suit::Hearts => 2,
-        Suit::Spades => 1,
+        Suit::Diamonds => 1,
     }
 }
 
@@ -245,9 +274,10 @@ pub struct GameState {
     pub trump: Suit,
     pub current_trick: Vec<(PlayerPosition, Card)>,
     pub team_scores: HashMap<u8, u16>,
-    pub team_eye: HashMap<u8, u32>,
+    pub team_eye: HashMap<u8, u16>,
     pub current_turn: PlayerPosition,
     pub is_first_round: bool,
+    pub attacking_team: u8,
 }
 
 impl GameState {
@@ -263,6 +293,7 @@ impl GameState {
             hands,
             trump,
             current_trick: vec![],
+            attacking_team: 1,
             team_scores: HashMap::from([(1, 0), (2, 0)]),
             team_eye: HashMap::from([(1, 0), (2, 0)]),
             current_turn: PlayerPosition::North,
@@ -289,30 +320,26 @@ impl GameState {
             return None;
         }
 
-        let (winner_team, loser_score, trump_team) = if a > b {
-            (1, b, 1)
+        let (winner, loser_score) = if a > b {
+            (1, b)
         } else {
-            (2, a, 1)
+            (2, a)
         };
 
         let mut eyes = 1;
 
-        if self.is_first_round {
-            eyes = 2;
-        } else if winner_team != trump_team {
-            eyes = 2;
-        }
-
         if loser_score < 30 {
-            eyes += 1;
+            eyes = 2;
         }
 
-        *self.team_eye.entry(winner_team).or_insert(0) += eyes;
-        self.is_first_round = false;
+        if winner != self.attacking_team {
+            eyes = 2;
+        }
 
-        Some(winner_team)
+        *self.team_eye.entry(winner).or_insert(0) += eyes;
+
+        Some(winner)
     }
-
 
 
     pub fn play_card(&mut self, player: PlayerPosition, card: Card) -> Result<(), &'static str> {
@@ -347,23 +374,16 @@ impl GameState {
         let lead_suit = self.current_trick[0].1.suit;
         let trump = self.trump;
 
-
-        let winner = self.current_trick.iter().max_by_key(|(_, card)| {
-            if card.rank == Rank::Jack {
-                (3, jack_priority(card.suit), card.rank.clone()) // приоритет 3, валетный порядок
-            } else if card.suit == self.trump {
-                (2, 0, card.rank.clone()) // обычный козырь
-            } else if card.suit == lead_suit {
-                (1, 0, card.rank.clone()) // масть по взятке
-            } else {
-                (0, 0, card.rank.clone()) // остальное
-            }
-        }).map(|(pos, _)| *pos).unwrap();
+        let winner = self.current_trick
+            .iter()
+            .max_by_key(|(_, card)| card.power(lead_suit, trump))
+            .map(|(pos, _)| *pos)
+            .unwrap();
 
         let trick_points: u16 = self
             .current_trick
             .iter()
-            .map(|(_, c)| c.points(trump) as u16)
+            .map(|(_, c)| c.points() as u16)
             .sum();
 
         let team = winner.team();
@@ -390,7 +410,7 @@ pub enum WSEvent {
     GameStart { room_id: String, position: PlayerPosition },
     GameClose{reason: String},
     YourHand{cards: Vec<Card>},
-    EyeUpdated{ team_a: u32, team_b: u32 },
+    EyeUpdated{ team_a: u16, team_b: u16 },
     TrumpUpdated{ trump: Suit },
     YourTurn,
     CardPlayed{position: PlayerPosition, card: Card},

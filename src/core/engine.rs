@@ -182,6 +182,15 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     );
 
                }
+                RoomManagerCommand::PlayerDisconnected { player, room_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if let Some(actor) = &room.actor {
+                            let _ = actor.send(
+                                RoomActorCommand::PlayerDisconnected { player }
+                            );
+                        }
+                    }
+                }
            }
 
         info!("rooms after: {:?}", rooms);
@@ -207,6 +216,11 @@ fn start_room_actor(
 
         for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
             let player = players.get(i).unwrap().to_string();  // NOTE unwrap_or
+            app_ctx.connection_pool()
+                   .get(&player.clone())
+                   .unwrap()
+                   .mark_as_in_game(room_id.clone(), *pos);
+
             player_positions.insert(player.clone(), *pos);
             app_ctx.connection_pool().send_to(
                 &player,
@@ -282,7 +296,7 @@ fn start_room_actor(
                                         app_ctx.connection_pool().broadcast(
                                             players.clone(),
                                             WSEvent::GameOver {
-                                                scores: state.team_scores.clone()
+                                                scores: state.team_eye.clone()
                                             }
                                         );
                                         break;
@@ -310,6 +324,15 @@ fn start_room_actor(
                             )
                         }
                     }
+                }
+                RoomActorCommand::PlayerDisconnected { player } => {
+                    app_ctx.connection_pool().broadcast(
+                        &players,
+                        WSEvent::GameClose {
+                            reason: format!("Player {} disconnected", player),
+                        },
+                    );
+                    break;
                 }
 
             };

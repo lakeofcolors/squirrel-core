@@ -92,7 +92,14 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
             if let Some(player) = ping_pool.get(&ping_username){
                 let last = *player.last_ping.lock().unwrap();
                 if last.elapsed() > Duration::from_secs(20) {
-                    ping_pool.remove(&ping_username);
+                    if let Some(room_id) = ping_pool.disconnect(&ping_username) {
+                        let _ = ping_ctx.room_manager.send(
+                            RoomManagerCommand::PlayerDisconnected {
+                                player: ping_username.clone(),
+                                room_id,
+                            }
+                        );
+                    }
                     let _ = ping_ctx.queue_manager.send(
                         QueueCommand::Disconnect { player: ping_username.clone() }
                     );
@@ -214,109 +221,6 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
 
 
                 }
-
-                //     WSIncomingMessage::Manage(SubOrUnsub::PlayCard(card)) => {
-                //         if let Some(uid) = &client_uid {
-                //             let card = Card {
-                //                 rank: match card.rank.unwrap().to_lowercase().as_str() {
-                //                     "7" => Rank::Seven,
-                //                     "8" => Rank::Eight,
-                //                     "9" => Rank::Nine,
-                //                     "10" => Rank::Ten,
-                //                     "j" => Rank::Jack,
-                //                     "q" => Rank::Queen,
-                //                     "k" => Rank::King,
-                //                     "a" => Rank::Ace,
-                //                     _ => { let _ = tx.send(WSEvent::Error { detail: "Invalid rank".to_string() }); continue; }
-                //                 },
-                //                 suit: match card.suit.unwrap().to_lowercase().as_str() {
-                //                     "c" => Suit::Clubs,
-                //                     "d" => Suit::Diamonds,
-                //                     "h" => Suit::Hearts,
-                //                     "s" => Suit::Spades,
-                //                     _ => { let _ = tx.send(WSEvent::Error { detail: "Invalid suit".to_string() }); continue; }
-                //                 },
-                //             };
-
-                //             let rooms = gm.active_rooms.lock().await;
-                //             for room in rooms.values() {
-                //                 let mut position: Option<PlayerPosition> = None;
-                //                 for (p, player) in &room.players {
-                //                     if player.lock().await.id == *uid {
-                //                         position = Some(*p);
-                //                         break;
-                //                     }
-                //                 }
-
-                //                 if let Some(pos) = position {
-                //                     let mut state = room.state.lock().await;
-                //                     match state.play_card(pos, card) {
-                //                         Ok(_) => {
-                //                             for (_, s) in &room.players {
-                //                                 let session = s.lock().await;
-                //                                 let _ = session.sender.send(WSEvent::CardPlayed(WSCardPlayed { position: pos, card }));
-                //                             }
-
-                //                             if let Some(winner) = state.resolve_trick() {
-                //                                 for (_, s) in &room.players {
-                //                                     let session = s.lock().await;
-                //                                     let _ = session.sender.send(WSEvent::TrickWon(WSTrickWon { position: winner }));
-                //                                 }
-
-                //                                 if state.hands.values().all(|h| h.is_empty()) {
-                //                                     let _ = state.update_eye_after_round();
-                //                                     let eye = state.team_eye.clone();
-                //                                     state.trump = Suit::random_suit(); // TODO dont know!!!
-                //                                     let _ = state.update_hands(); //
-
-                //                                     for (pos, s) in &room.players {
-                //                                         let session = s.lock().await;
-
-                //                                         let _ = session.sender.send(WSEvent::EyeUpdated {
-                //                                             team_a: eye.get(&1).copied().unwrap_or(0),
-                //                                             team_b: eye.get(&2).copied().unwrap_or(0),
-                //                                         });
-                //                                         let _ = session.sender.send(WSEvent::TrumpUpdated { trump: state.trump.clone() });
-
-                //                                         if let Some(hand) = state.hands.get(pos) {
-                //                                             let _ = session.sender.send(WSEvent::YourHand(WSYourHand {
-                //                                                 cards: hand.clone(),
-                //                                             }));
-                //                                             if state.current_turn == *pos {
-                //                                                 let _ = session.sender.send(WSEvent::YourTurn(WSYourTurn));
-                //                                             }
-                //                                         }
-                //                                     }
-
-                //                                     if eye.get(&1).copied().unwrap_or(0) >= 12 || eye.get(&2).copied().unwrap_or(0) >= 12 {
-                //                                         for (_, s) in &room.players {
-                //                                             let session = s.lock().await;
-                //                                             let _ = session.sender.send(WSEvent::GameOver(WSGameOver {
-                //                                                 scores: state.team_scores.clone(),
-                //                                             }));
-                //                                         }
-                //                                     }
-                //                                 } else {
-                //                                     let session = room.players.get(&winner).unwrap().lock().await;
-                //                                     let _ = session.sender.send(WSEvent::YourTurn(WSYourTurn));
-                //                                 }
-                //                             } else {
-                //                                 if let Some(s) = room.players.get(&state.current_turn) {
-                //                                     let session = s.lock().await;
-                //                                     let _ = session.sender.send(WSEvent::YourTurn(WSYourTurn));
-                //                                 }
-                //                             }
-                //                         }
-                //                         Err(e) => {
-                //                             let _ = tx.send(WSEvent::Error { detail: e.to_string() });
-                //                         }
-                //                     }
-                //                 }
-                //             }
-                //         }
-                //     }
-                //     _ => {break}
-                // }
             }
 
             Message::Pong(_) => {
@@ -328,7 +232,14 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
             }
 
             Message::Close(_) => {
-                connection_pool.disconnect(&username.clone());
+                if let Some(room_id) = connection_pool.disconnect(&username.clone()) {
+                    let _ = app_ctx.room_manager.send(
+                        RoomManagerCommand::PlayerDisconnected {
+                            player: username.clone(),
+                            room_id,
+                        }
+                    );
+                }
                 let _ = app_ctx.queue_manager.send(
                     QueueCommand::Disconnect { player: username.clone() }
                 );
@@ -344,4 +255,24 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
             _ => {}
         }
     }
+    if let Some(room_id) = connection_pool.disconnect(&username) {
+        let _ = app_ctx.room_manager.send(
+            RoomManagerCommand::PlayerDisconnected {
+                player: username.clone(),
+                room_id,
+            }
+        );
+    }
+
+    let _ = app_ctx.queue_manager.send(
+        QueueCommand::Disconnect { player: username.clone() }
+    );
+
+    let _ = app_ctx.room_manager.send(
+        RoomManagerCommand::LeaveAllRoom { player: username.clone() }
+    );
+
+    let _ = app_ctx.room_manager.send(
+        RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
+    );
 }

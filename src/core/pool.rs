@@ -3,7 +3,9 @@ use std::time::{Instant, Duration};
 use dashmap::DashMap;
 use tracing::error;
 
-use crate::utils::schemas::{WSEvent, PlayerPosition};
+use crate::utils::schemas::{WSEvent, PlayerPosition, RoomManagerCommand, RoomId};
+
+use super::context::get_global_context;
 
 #[derive(Debug, PartialEq)]
 pub enum PlayerStatus {
@@ -111,11 +113,20 @@ impl ConnectionPool{
             .or_insert_with(|| Arc::new(PlayerSession::new(username.to_string(), sender)));
     }
 
-    pub fn disconnect(&self, username: &str){
-        if let Some(player) = self.get(username){
+    pub fn disconnect(&self, username: &str) -> Option<RoomId> {
+        if let Some(player) = self.get(username) {
+            let room_id = {
+                let status = player.status.read().unwrap();
+                match &*status {
+                    PlayerStatus::InGame { room_id, .. } => Some(room_id.clone()),
+                    _ => None,
+                }
+            };
             player.mark_as_disconnected();
             player.clear_sender();
+            return room_id
         }
+        None
     }
 
     pub fn remove(&self, username: &str){
