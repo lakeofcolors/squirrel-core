@@ -415,13 +415,14 @@ impl GameState {
         }
 
 
-        if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit){
-            return Err("Cannot play Ace before suit is opened");
-        }
-
         if !self.current_trick.is_empty() {
             let lead_suit = self.current_trick[0].1.suit;
             let has_lead_suit = hand.iter().any(|c| c.suit == lead_suit);
+
+            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit){
+                return Err("Cannot play Ace before suit is opened");
+            }
+
             if card.suit != lead_suit && has_lead_suit {
                 return Err("Must follow suit");
             }
