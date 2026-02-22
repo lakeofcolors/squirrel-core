@@ -12,7 +12,7 @@ use tracing::{info, warn, debug, error};
 
 use crate::{
     core::context::AppContext,
-    core::pool::{PlayerSession},
+    core::pool::{PlayerSession, ConnectionPool},
     utils::schemas::{QueueCommand, QueueKey, Card, Rank, Suit, PlayerPosition, WSIncomingMessage, WSEvent, WSCardPlayed, WSTrickWon, RoomKind},
     utils::{jwt::{validate_token}, schemas::RoomManagerCommand},
 };
@@ -49,212 +49,220 @@ pub async fn ws_handler(
 
 }
 
-async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: String) {
-    let (write, mut read) = socket.split();
-    let write_arc = Arc::new(Mutex::new(write));
+fn handle_incoming(
+    incoming: WSIncomingMessage,
+    app_ctx: &Arc<AppContext>,
+    connection_pool: &ConnectionPool,
+    username: &str,
+) {
+    match incoming {
 
-    // NOTE mb mpsc::channel?
-    let (tx, mut rx): (UnboundedSender<WSEvent>, UnboundedReceiver<WSEvent>) = mpsc::unbounded_channel();
-    let connection_pool = app_ctx.connection_pool();
-    connection_pool.pool(&username.clone(), tx);
-    info!("{} connected to pool", &username.clone());
-    let session = connection_pool.get(&username).unwrap();
+        WSIncomingMessage::FindGame { stake, currency, league } => {
+            let _ = app_ctx.queue_manager.send(
+                QueueCommand::Enqueue {
+                    player: username.to_string(),
+                    key: QueueKey {
+                        stake,
+                        currency,
+                        league,
+                    },
+                },
+            );
 
-
-    // Спавним отправку сообщений
-    let write_loop = write_arc.clone();
-    tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&msg) {
-                if write_loop.lock().await.send(Message::Text(json)).await.is_err() {
-                    warn!("Ошибка отправки JSON в WebSocket");
-                    break;
-                }
-            } else {
-                warn!("Не удалось сериализовать WSEvent");
+            if let Some(session) = connection_pool.get(username) {
+                session.mark_as_in_queue();
             }
         }
-    });
 
-    // Ping task
-    let ping_write = write_arc.clone();
-    let ping_pool = connection_pool.clone();
-    let ping_username = username.clone();
-    let ping_ctx = app_ctx.clone();
+        WSIncomingMessage::CancelSearch { stake, currency, league } => {
+            let _ = app_ctx.queue_manager.send(
+                QueueCommand::Dequeue {
+                    player: username.to_string(),
+                    key: QueueKey {
+                        stake,
+                        currency,
+                        league,
+                    },
+                },
+            );
 
-    // NOTE tokio::select mb
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(5));
-
-        loop{
-            interval.tick().await;
-
-            if let Some(player) = ping_pool.get(&ping_username){
-                let last = *player.last_ping.lock().unwrap();
-                if last.elapsed() > Duration::from_secs(20) {
-                    if let Some(room_id) = ping_pool.disconnect(&ping_username) {
-                        let _ = ping_ctx.room_manager.send(
-                            RoomManagerCommand::PlayerDisconnected {
-                                player: ping_username.clone(),
-                                room_id,
-                            }
-                        );
-                    }
-                    let _ = ping_ctx.queue_manager.send(
-                        QueueCommand::Disconnect { player: ping_username.clone() }
-                    );
-                    let _ = ping_ctx.room_manager.send(
-                        RoomManagerCommand::LeaveAllRoom { player: ping_username.clone() }
-                    );
-                    let _ = ping_ctx.room_manager.send(
-                        RoomManagerCommand::UnsubscribeRooms { player: ping_username.clone() }
-                    );
-                    break;
-                }
-            }else{
-                break;
-            }
-
-            if ping_write.lock().await.send(Message::Ping(vec![])).await.is_err(){
-                warn!("Ошибка отправки Ping в WebSocket");
-                break;
+            if let Some(session) = connection_pool.get(username) {
+                session.mark_as_connected();
             }
         }
-    });
 
-    // Message handler
-    while let Some(result) = read.next().await {
-        let msg = match result {
-            Ok(msg) => msg,
-            Err(_) => break,
-        };
+        WSIncomingMessage::CreateRoom {
+            stake,
+            currency,
+            league,
+            password_hash,
+        } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::CreateRoom {
+                    key: QueueKey {
+                        stake,
+                        currency,
+                        league,
+                    },
+                    players: vec![username.to_string()],
+                    password_hash: password_hash.clone(),
+                    kind: if password_hash.is_some() {
+                        RoomKind::Private
+                    } else {
+                        RoomKind::Open
+                    },
+                },
+            );
+        }
 
-        match msg {
-            Message::Text(text) => {
-                let parsed: Result<WSIncomingMessage, _> = serde_json::from_str(&text);
-                let incoming = match parsed {
-                    Ok(val) => val,
-                    Err(e) => {
-                        warn!("Invalid message: {e:?}");
-                        continue;
-                    }
-                };
+        WSIncomingMessage::JoinRoom { room_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::JoinRoom {
+                    player: username.to_string(),
+                    room_id,
+                },
+            );
+        }
 
-                match incoming {
-                    WSIncomingMessage::FindGame{stake, currency, league} => {
-                        let _ = app_ctx.queue_manager.send(
-                            QueueCommand::Enqueue{
-                                player: username.clone(),
-                                key: QueueKey{
-                                    stake,
-                                    currency,
-                                    league
-                                }
-                            }
-                        );
-                        session.mark_as_in_queue();
-                    }
+        WSIncomingMessage::LeaveRoom { room_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::LeaveRoom {
+                    player: username.to_string(),
+                    room_id,
+                },
+            );
+        }
 
-                    WSIncomingMessage::CancelSearch{stake, currency, league} => {
-                         let _ = app_ctx.queue_manager.send(
-                            QueueCommand::Dequeue{
-                                player: username.clone(),
-                                key: QueueKey{
-                                    stake,
-                                    currency,
-                                    league
-                                }
-                            }
-                        );
-                        session.mark_as_connected();
-                    }
+        WSIncomingMessage::SubscribeRooms => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::SubscribeRooms {
+                    player: username.to_string(),
+                },
+            );
+        }
 
-                    WSIncomingMessage::CreateRoom { stake, currency, league, password_hash} => {
-                        let _ = app_ctx.room_manager.send(
-                            RoomManagerCommand::CreateRoom {
-                                key: QueueKey { stake, currency, league },
-                                players: Vec::from([username.clone()]),
-                                password_hash: password_hash.clone(),
-                                kind: match password_hash{
-                                    Some(_) => RoomKind::Private,
-                                    None => RoomKind::Open
-                                }
-                            }
-                        );
-                    }
-                    WSIncomingMessage::JoinRoom { room_id } => {
-                        let _ = app_ctx.room_manager.send(
-                            RoomManagerCommand::JoinRoom { player: username.clone(), room_id }
-                        );
-                    }
-                    WSIncomingMessage::LeaveRoom { room_id } => {
-                        let _ = app_ctx.room_manager.send(
-                            RoomManagerCommand::LeaveRoom { player: username.clone(), room_id }
-                        );
-                    }
-                    WSIncomingMessage::SubscribeRooms => {
-                        let _ = app_ctx.room_manager.send(
-                            RoomManagerCommand::SubscribeRooms { player: username.clone() }
-                        );
-                    }
-                    WSIncomingMessage::UnsubscribeRooms => {
-                        let _ = app_ctx.room_manager.send(
-                            RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
-                        );
-                    }
-                    WSIncomingMessage::PlayCard{ room_id, rank, suit } => {
-                        let card = match Card::build_from(rank, suit) {
-                            Ok(card) => {
-                                let _ = app_ctx.room_manager.send(
-                                    RoomManagerCommand::PlayCard {
-                                        player: username.clone(),
-                                        room_id,
-                                        card,
-                                    }
-                                );
-                            },
-                            Err(err_msg) => {
-                                error!("Player {} play card err: {}", username.clone(), err_msg);
-                            }
-                        };
-                    }
+        WSIncomingMessage::UnsubscribeRooms => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::UnsubscribeRooms {
+                    player: username.to_string(),
+                },
+            );
+        }
 
-
-                }
-            }
-
-            Message::Pong(_) => {
-                // Обновляем last_ping и отвечаем Pong
-                debug!("pong from {}", username.clone());
-                if let Some(player) = connection_pool.get(&username.clone()) {
-                    player.update_last_ping();
-                }
-            }
-
-            Message::Close(_) => {
-                if let Some(room_id) = connection_pool.disconnect(&username.clone()) {
+        WSIncomingMessage::PlayCard { room_id, rank, suit } => {
+            match Card::build_from(rank, suit) {
+                Ok(card) => {
                     let _ = app_ctx.room_manager.send(
-                        RoomManagerCommand::PlayerDisconnected {
-                            player: username.clone(),
+                        RoomManagerCommand::PlayCard {
+                            player: username.to_string(),
                             room_id,
-                        }
+                            card,
+                        },
                     );
                 }
-                let _ = app_ctx.queue_manager.send(
-                    QueueCommand::Disconnect { player: username.clone() }
-                );
-                let _ = app_ctx.room_manager.send(
-                    RoomManagerCommand::LeaveAllRoom { player: username.clone() }
-                );
-                let _ = app_ctx.room_manager.send(
-                    RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
-                );
-
-            },
-
-            _ => {}
+                Err(err_msg) => {
+                    if let Some(player) = connection_pool.get(username) {
+                        let _ = player.send(
+                            WSEvent::Error {
+                                detail: err_msg.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
         }
     }
+}
+
+async fn handle_socket(
+    socket: WebSocket,
+    app_ctx: Arc<AppContext>,
+    username: String,
+) {
+    let (mut write, mut read) = socket.split();
+
+    let (tx, mut rx) = mpsc::unbounded_channel::<WSEvent>();
+    let connection_pool = app_ctx.connection_pool();
+
+    connection_pool.pool(&username, tx);
+    info!("{} connected to pool", username);
+
+    let mut ping_interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        tokio::select! {
+
+            // ===== READ SIDE =====
+            msg = read.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(incoming) = serde_json::from_str::<WSIncomingMessage>(&text) {
+                            handle_incoming(incoming, &app_ctx, &connection_pool, &username);
+                        } else {
+                            warn!("Invalid WS message");
+                        }
+                    }
+
+                    Some(Ok(Message::Pong(_))) => {
+                        if let Some(player) = connection_pool.get(&username) {
+                            player.update_last_ping();
+                        }
+                    }
+
+                    Some(Ok(Message::Close(_))) => {
+                        info!("{} sent Close", username);
+                        break;
+                    }
+
+                    Some(Err(e)) => {
+                        warn!("WS read error: {:?}", e);
+                        break;
+                    }
+
+                    None => {
+                        info!("{} socket closed", username);
+                        break;
+                    }
+
+                    _ => {}
+                }
+            }
+
+            // ===== WRITE SIDE =====
+            Some(event) = rx.recv() => {
+                match serde_json::to_string(&event) {
+                    Ok(json) => {
+                        if write.send(Message::Text(json)).await.is_err() {
+                            warn!("WS write failed for {}", username);
+                            break;
+                        }
+                    }
+                    Err(_) => warn!("Failed to serialize WSEvent"),
+                }
+            }
+
+            // ===== PING =====
+            _ = ping_interval.tick() => {
+                if let Some(player) = connection_pool.get(&username) {
+                    let last = *player.last_ping.lock().unwrap();
+                    if last.elapsed() > Duration::from_secs(20) {
+                        warn!("Ping timeout for {}", username);
+                        break;
+                    }
+                } else {
+                    break;
+                }
+
+                if write.send(Message::Ping(vec![])).await.is_err() {
+                    warn!("Ping send failed for {}", username);
+                    break;
+                }
+            }
+        }
+    }
+
+    // ===== CLEANUP (единственное место disconnect) =====
+
     if let Some(room_id) = connection_pool.disconnect(&username) {
         let _ = app_ctx.room_manager.send(
             RoomManagerCommand::PlayerDisconnected {
@@ -275,4 +283,8 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, username: St
     let _ = app_ctx.room_manager.send(
         RoomManagerCommand::UnsubscribeRooms { player: username.clone() }
     );
+
+    connection_pool.remove(&username);
+
+    info!("{} fully disconnected", username);
 }

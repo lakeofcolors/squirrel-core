@@ -88,7 +88,7 @@ impl ConnectionPool{
         if let Some(player) = self.get(username){
             if player.send(event.clone()).is_err() {
                 error!("Ошибка отправки {:?} и дисконнект", event.clone());
-                self.disconnect(username);
+                // self.disconnect(username);
             }
         }
     }

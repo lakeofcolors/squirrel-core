@@ -435,13 +435,14 @@ impl GameState {
 
 
     pub fn resolve_trick(&mut self) -> Option<PlayerPosition> {
+        let lead_suit = self.current_trick[0].1.suit;
+        self.suits_played.insert(lead_suit);
+
         if self.current_trick.len() != 4 {
             return None;
         }
-
-        let lead_suit = self.current_trick[0].1.suit;
-        self.suits_played.insert(lead_suit);
         let trump = self.trump;
+
 
         let winner = self.current_trick
             .iter()
