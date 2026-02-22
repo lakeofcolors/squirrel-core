@@ -5,6 +5,7 @@ use std::time::Instant;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rust_decimal::Decimal;
+use std::collections::HashSet;
 
 // use crate::core::engine::GameEngine;
 
@@ -278,6 +279,8 @@ pub struct GameState {
     pub current_turn: PlayerPosition,
     pub is_first_round: bool,
     pub attacking_team: u8,
+    pub player_trump_map: HashMap<PlayerPosition, Suit>,
+    pub suits_played: HashSet<Suit>
 }
 
 impl GameState {
@@ -290,15 +293,59 @@ impl GameState {
         hands.insert(PlayerPosition::West, hands_vec[3].clone());
 
         Self {
-            hands,
             trump,
+            player_trump_map: Self::assign_player_trumps(hands.clone()),
+            hands,
             current_trick: vec![],
+            suits_played: HashSet::new(),
             attacking_team: 1,
             team_scores: HashMap::from([(1, 0), (2, 0)]),
             team_eye: HashMap::from([(1, 0), (2, 0)]),
             current_turn: PlayerPosition::North,
             is_first_round: true,
         }
+    }
+
+    pub fn find_club_jack_owner(hands: HashMap<PlayerPosition, Vec<Card>>) -> Option<PlayerPosition> {
+        for (pos, hand) in hands {
+            if hand.contains(&Card { suit: Suit::Clubs, rank: Rank::Jack }) {
+                return Some(pos);
+            }
+        }
+        None
+    }
+
+    pub fn update_round_trump(&mut self) {
+        let owner = Self::find_club_jack_owner(self.hands.clone()).unwrap();
+        self.trump = *self.player_trump_map.get(&owner).unwrap();
+    }
+
+    pub fn update_round_attacking_team(&mut self){
+        if let Some(owner) = Self::find_club_jack_owner(self.hands.clone()) {
+            self.attacking_team = owner.team();
+        }
+    }
+    fn assign_player_trumps(hands: HashMap<PlayerPosition, Vec<Card>>) ->  HashMap<PlayerPosition, Suit> {
+        let owner = Self::find_club_jack_owner(hands).unwrap();
+        let mut player_trump_map = HashMap::new();
+        let order = [
+            owner,
+            owner.next(),
+            owner.next().next(),
+            owner.next().next().next(),
+        ];
+
+        let suits = [
+            Suit::Clubs,
+            Suit::Hearts,
+            Suit::Spades,
+            Suit::Diamonds,
+        ];
+
+        for (pos, suit) in order.iter().zip(suits.iter()) {
+            player_trump_map.insert(*pos, *suit);
+        }
+        player_trump_map
     }
 
     pub fn update_hands(&mut self){
@@ -317,7 +364,18 @@ impl GameState {
         let b = self.team_scores.get(&2).copied().unwrap_or(0);
 
         if a == 60 && b == 60 {
+            self.attacking_team = if self.attacking_team == 1 { 2 } else { 1 };
             return None;
+        }
+
+        if a == 120 {
+            *self.team_eye.entry(1).or_insert(0) += 12;
+            return Some(1);
+        }
+
+        if b == 120 {
+            *self.team_eye.entry(2).or_insert(0) += 12;
+            return Some(2);
         }
 
         let (winner, loser_score) = if a > b {
@@ -328,15 +386,20 @@ impl GameState {
 
         let mut eyes = 1;
 
-        if loser_score < 30 {
-            eyes = 2;
-        }
+        if self.is_first_round{
+            eyes = 2
+        }else{
+            if loser_score < 30 {
+                eyes = 2;
+            }
 
-        if winner != self.attacking_team {
-            eyes = 2;
+            if winner != self.attacking_team {
+                eyes = 2;
+            }
         }
 
         *self.team_eye.entry(winner).or_insert(0) += eyes;
+        self.is_first_round = false;
 
         Some(winner)
     }
@@ -349,6 +412,11 @@ impl GameState {
         let hand = self.hands.get_mut(&player).ok_or("Player not found")?;
         if !hand.contains(&card) {
             return Err("Card not in hand");
+        }
+
+
+        if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit){
+            return Err("Cannot play Ace before suit is opened");
         }
 
         if !self.current_trick.is_empty() {
@@ -372,6 +440,7 @@ impl GameState {
         }
 
         let lead_suit = self.current_trick[0].1.suit;
+        self.suits_played.insert(lead_suit);
         let trump = self.trump;
 
         let winner = self.current_trick

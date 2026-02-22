@@ -257,7 +257,8 @@ fn start_room_actor(
                                 if state.hands.values().all(|h| h.is_empty()) {
                                     let _ = state.update_eye_after_round();
                                     let eye = state.team_eye.clone();
-                                    state.trump = Suit::random_suit(); // TODO dont know!!! trump_to_position
+                                    state.update_round_trump();
+                                    state.update_round_attacking_team();
                                     let _ = state.update_hands(); //
 
                                     app_ctx.connection_pool().broadcast(
