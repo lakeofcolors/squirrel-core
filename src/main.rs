@@ -30,14 +30,18 @@ async fn main() {
     info!("Physical cores: {}", num_cpus::get_physical());
     let room_manager_writter = start_room_manager();
     let queue_manager_writter = start_queue_manager(room_manager_writter.clone());
+    let db_pool = crate::utils::db::pg_pool()
+        .await
+        .expect("Failed to create PgPool");
 
     let app_ctx = Arc::new(
         AppContext::new(
             room_manager_writter,
-            queue_manager_writter
+            queue_manager_writter,
+            db_pool
         )
     );
-    let pg_pool = Arc::new(pg_pool().await.expect(""));
+
     set_global_context(app_ctx.clone());
 
     let cors = CorsLayer::new()
@@ -49,7 +53,6 @@ async fn main() {
         .route("/v1/ws", get(ws_handler))
         .route("/auth/login", post(telegram_login))
         .route("/auth/me", get(me))
-        .with_state(pg_pool)
         .layer(cors)
         .layer(Extension(app_ctx))
         .layer(TraceLayer::new_for_http());

@@ -1,14 +1,14 @@
 use axum::{
     extract::{Json, State},
     http::{StatusCode, HeaderMap},
-    response::IntoResponse,
+    response::IntoResponse, Extension,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{error, info};
 
-use crate::utils::telegram::verify_telegram_auth;
+use crate::{utils::telegram::verify_telegram_auth, core::context::AppContext};
 use crate::utils::jwt::{generate_token, validate_token};
 
 #[derive(Deserialize)]
@@ -42,9 +42,10 @@ pub struct TokenResponse {
 }
 
 pub async fn telegram_login(
-    State(pool): State<Arc<PgPool>>,
+    Extension(app_ctx): Extension<Arc<AppContext>>,
     Json(payload): Json<TelegramAuthRequest>,
 ) -> impl IntoResponse {
+    let pool = &app_ctx.db_pool;
     let bot_token = match std::env::var("BOT_TOKEN") {
         Ok(t) => t,
         Err(_) => {
@@ -64,7 +65,7 @@ pub async fn telegram_login(
                 .clone()
                 .unwrap_or(init_data.user.first_name.clone());
             let photo_url = init_data.user.photo_url.clone();
-            let user = sqlx::query!(
+            let _ = sqlx::query!(
                 "INSERT INTO users (telegram_id, username, photo_url)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username, photo_url = EXCLUDED.photo_url
@@ -77,8 +78,8 @@ pub async fn telegram_login(
             .await;
 
             match (
-                generate_token(&telegram_id.to_string(), Some(3600)),       // 1 hour
-                generate_token(&telegram_id.to_string(), Some(7 * 24 * 3600)) // 7 days
+                generate_token(telegram_id, Some(3600)),       // 1 hour
+                generate_token(telegram_id, Some(7 * 24 * 3600)) // 7 days
             ) {
                 (Ok(access_token), Ok(refresh_token)) => {
                     let response = TokenResponse {
@@ -98,9 +99,10 @@ pub async fn telegram_login(
 }
 
 pub async fn me(
-    State(pool): State<Arc<PgPool>>,
+    Extension(app_ctx): Extension<Arc<AppContext>>,
     headers: HeaderMap
 ) -> impl IntoResponse {
+    let pool = &app_ctx.db_pool;
     let auth_header = match headers.get("authorization") {
         Some(value) => value,
         None => return (StatusCode::UNAUTHORIZED, "Missing auth header").into_response(),
@@ -124,7 +126,7 @@ pub async fn me(
         }
     };
 
-    let telegram_id: i64 = claims.sub.parse().unwrap();
+    let telegram_id: i64 = claims.sub;
 
     let user = sqlx::query!(
         "SELECT username, rating, photo_url FROM users WHERE telegram_id = $1",

@@ -1,5 +1,6 @@
 use crate::core::pool::ConnectionPool;
 use once_cell::sync::OnceCell;
+use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use crate::utils::schemas::{RoomManagerCommand, QueueCommand};
@@ -9,6 +10,7 @@ pub struct AppContext{
     connection_pool: Arc<ConnectionPool>,
     pub room_manager: mpsc::UnboundedSender<RoomManagerCommand>,
     pub queue_manager: mpsc::UnboundedSender<QueueCommand>,
+    pub db_pool: PgPool,
 }
 
 static GLOBAL_CONTEXT: OnceCell<Arc<AppContext>> = OnceCell::new();
@@ -25,11 +27,14 @@ impl AppContext {
     pub fn new(
         room_manager: mpsc::UnboundedSender<RoomManagerCommand>,
         queue_manager: mpsc::UnboundedSender<QueueCommand>,
+        db_pool: PgPool
     ) -> Self{
+
         Self{
             connection_pool: Arc::new(ConnectionPool::new()),
             room_manager,
             queue_manager,
+            db_pool
         }
     }
 

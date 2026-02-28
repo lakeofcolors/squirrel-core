@@ -1,23 +1,28 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 use std::time::{Instant, Duration};
 use dashmap::DashMap;
 use tracing::error;
 
-use crate::utils::schemas::{WSEvent, PlayerPosition, RoomManagerCommand, RoomId};
+use crate::utils::schemas::{WSEvent, PlayerPosition, RoomManagerCommand, RoomId, PlayerMeta, PlayerId};
 
 use super::context::get_global_context;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PlayerStatus {
     Connected,
     Disconnected,
     InQueue,
-    InGame { room_id: String, position: PlayerPosition },
+    InGame {
+        room_id: String,
+        position: PlayerPosition,
+        disconnected_at: Option<Instant>
+    },
 }
 
 #[derive(Debug)]
 pub struct PlayerSession {
-    pub username: String,
+    pub player_meta: PlayerMeta,
     pub sender: Mutex<Option<tokio::sync::mpsc::UnboundedSender<WSEvent>>>,
     pub status: Arc<RwLock<PlayerStatus>>,
     pub last_ping: Mutex<Instant>,
@@ -25,21 +30,21 @@ pub struct PlayerSession {
 
 #[derive(Debug)]
 pub struct ConnectionPool{
-    players: DashMap<String, Arc<PlayerSession>>
+    players: DashMap<PlayerId, Arc<PlayerSession>>
 }
 
 
 impl PlayerSession{
-    pub fn new(username: String, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> Self {
+    pub fn new(player_meta: PlayerMeta, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> Self {
         Self{
-            username,
+            player_meta,
             sender: Mutex::new(Some(sender)),
             status: Arc::new(RwLock::new(PlayerStatus::Connected)),
             last_ping: Mutex::new(Instant::now())
         }
     }
-    pub fn send(&self, event: WSEvent) -> Result<(), ()> {
-        let sender = self.sender.lock().unwrap();
+    pub async fn send(&self, event: WSEvent) -> Result<(), ()> {
+        let sender = self.sender.lock().await;
 
         if let Some(tx) = sender.as_ref() {
             tx.send(event).map_err(|_| ())?;
@@ -48,29 +53,42 @@ impl PlayerSession{
             Err(())
         }
     }
-    pub fn mark_as_in_game(&self, room_id: String, position: PlayerPosition){
-        *self.status.write().unwrap() = PlayerStatus::InGame { room_id, position }
+    pub async fn mark_as_in_game(&self, room_id: String, position: PlayerPosition){
+        *self.status.write().await = PlayerStatus::InGame { room_id, position, disconnected_at: None }
     }
-    pub fn mark_as_disconnected(&self){
-        *self.status.write().unwrap() = PlayerStatus::Disconnected;
+    pub async fn mark_as_disconnected(&self){
+        *self.status.write().await = PlayerStatus::Disconnected;
     }
-    pub fn mark_as_connected(&self){
-        *self.status.write().unwrap() = PlayerStatus::Connected;
+    pub async fn mark_temp_disconnected(&self) {
+        let mut status = self.status.write().await;
+        if let PlayerStatus::InGame { disconnected_at, .. } = &mut *status {
+            *disconnected_at = Some(Instant::now());
+        }
     }
-    pub fn mark_as_in_queue(&self){
-        *self.status.write().unwrap() = PlayerStatus::InQueue;
-    }
-    fn clear_sender(&self) {
-        *self.sender.lock().unwrap() = None;
-    }
-    fn update_sender(&self, new_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
-        *self.sender.lock().unwrap() = Some(new_sender);
-    }
-    pub fn update_last_ping(&self){
-        *self.last_ping.lock().unwrap() = Instant::now();
-    }
+    pub async fn mark_as_connected(&self) {
+        let mut status = self.status.write().await;
 
-
+        match &mut *status {
+            PlayerStatus::InGame { disconnected_at, .. } => {
+                *disconnected_at = None;
+            }
+            _ => {
+                *status = PlayerStatus::Connected;
+            }
+        }
+    }
+    pub async fn mark_as_in_queue(&self){
+        *self.status.write().await = PlayerStatus::InQueue;
+    }
+    async fn clear_sender(&self) {
+        *self.sender.lock().await = None;
+    }
+    async fn update_sender(&self, new_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
+        *self.sender.lock().await = Some(new_sender);
+    }
+    pub async fn update_last_ping(&self){
+        *self.last_ping.lock().await = Instant::now();
+    }
 }
 
 impl ConnectionPool{
@@ -80,57 +98,61 @@ impl ConnectionPool{
         }
     }
 
-    pub fn get(&self, username: &str) -> Option<Arc<PlayerSession>>{
-        self.players.get(username).map(|p| p.value().clone())
+    pub fn get(&self, player_id: &i64) -> Option<Arc<PlayerSession>>{
+        self.players.get(player_id).map(|p| p.value().clone())
     }
 
-    pub fn send_to(&self, username: &str, event: WSEvent){
-        if let Some(player) = self.get(username){
-            if player.send(event.clone()).is_err() {
+    pub async fn send_to(&self, player_id: &i64, event: WSEvent){
+        if let Some(player) = self.get(player_id){
+            if player.send(event.clone()).await.is_err() {
                 error!("Ошибка отправки {:?} и дисконнект", event.clone());
                 // self.disconnect(username);
             }
         }
     }
 
-    pub fn broadcast<I>(&self, players: I, event: WSEvent)
+    pub async fn broadcast<I>(&self, players: I, event: WSEvent)
     where
-        I: IntoIterator,
-        I::Item: AsRef<str>,
+        I: IntoIterator<Item = i64>,
     {
         for player in players{
-            self.send_to(player.as_ref(), event.clone())
+            self.send_to(&player, event.clone()).await
         }
     }
 
-    pub fn pool(&self, username: &str, sender: tokio::sync::mpsc::UnboundedSender<WSEvent>){
-        self.players
-            .entry(username.to_string())
-            .and_modify(|p| {
-                p.mark_as_connected();
-                p.update_sender(sender.clone());
-            })
-            .or_insert_with(|| Arc::new(PlayerSession::new(username.to_string(), sender)));
-    }
-
-    pub fn disconnect(&self, username: &str) -> Option<RoomId> {
-        if let Some(player) = self.get(username) {
-            let room_id = {
-                let status = player.status.read().unwrap();
-                match &*status {
-                    PlayerStatus::InGame { room_id, .. } => Some(room_id.clone()),
-                    _ => None,
-                }
-            };
-            player.mark_as_disconnected();
-            player.clear_sender();
-            return room_id
+    pub async fn pool(
+        &self,
+        player_meta: PlayerMeta,
+        sender: tokio::sync::mpsc::UnboundedSender<WSEvent>,
+    ) {
+        if let Some(player) = self.players.get(&player_meta.id) {
+            player.mark_as_connected().await;
+            player.update_sender(sender).await;
+            player.update_last_ping().await;
+        } else {
+            self.players.insert(
+                player_meta.id,
+                Arc::new(PlayerSession::new(player_meta, sender)),
+            );
         }
-        None
+    }
+    pub async fn temp_disconnected(&self, player_id: &i64){
+        if let Some(player) = self.get(player_id) {
+            player.mark_temp_disconnected().await;
+            player.clear_sender().await;
+        }
     }
 
-    pub fn remove(&self, username: &str){
-        self.players.remove(username);
+    pub async fn disconnect(&self, player_id: &i64){
+        if let Some(player) = self.get(player_id) {
+            player.mark_as_disconnected().await;
+            player.clear_sender().await;
+        }
+
+    }
+
+    pub fn remove(&self, player_id: &i64){
+        self.players.remove(player_id);
     }
 
 }

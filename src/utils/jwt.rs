@@ -11,7 +11,7 @@ use futures_util::SinkExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,
+    pub sub: i64,
     pub exp: usize,
 }
 
@@ -26,7 +26,7 @@ pub fn validate_token(token: &str) -> Result<Claims, Error> {
     Ok(decoded.claims)
 }
 
-pub fn generate_token(username: &str, exp: Option<u64>) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn generate_token(player_id: i64, exp: Option<u64>) -> Result<String, jsonwebtoken::errors::Error> {
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -34,7 +34,7 @@ pub fn generate_token(username: &str, exp: Option<u64>) -> Result<String, jsonwe
 
     let claims = Claims{
         exp: expiration as usize,
-        sub: username.to_string(),
+        sub: player_id,
     };
 
     // #TODO secret variable

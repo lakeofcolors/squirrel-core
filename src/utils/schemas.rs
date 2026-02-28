@@ -12,9 +12,16 @@ use std::collections::HashSet;
 pub type Hash = String;
 pub type RoomId = String;
 pub type RoomName = String;
-pub type PlayerId = String;
+pub type PlayerId = i64;
 
 
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct PlayerMeta{
+    pub id: PlayerId,
+    pub username: Option<String>,
+    pub rating: i32,
+    pub photo_url: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Currency {
@@ -77,11 +84,15 @@ pub enum RoomManagerCommand {
     UnsubscribeRooms { player: PlayerId },
 
     PlayCard{ player: PlayerId, room_id: RoomId, card: Card},
+    PlayerTemporaryDisconnect{ player: PlayerId, room_id: RoomId },
+    PlayerReconnect{ player: PlayerId, room_id: RoomId },
     PlayerDisconnected { player: PlayerId, room_id: RoomId },
 }
 
 pub enum RoomActorCommand{
     PlayCard{ player: PlayerId, card: Card},
+    PlayerTemporaryDisconnect{ player: PlayerId },
+    PlayerReconnect{ player: PlayerId },
     PlayerDisconnected { player: PlayerId },
 }
 
@@ -100,7 +111,7 @@ pub struct RoomMeta{
     pub name: RoomName,
     pub key: QueueKey,
     pub kind: RoomKind,
-    pub players: Vec<PlayerId>,
+    pub players: Vec<PlayerMeta>,
 
 }
 
@@ -284,7 +295,7 @@ pub struct GameState {
 }
 
 impl GameState {
-    pub fn new(trump: Suit) -> Self {
+    pub fn new() -> Self {
         let hands_vec = deal_cards();
         let mut hands = HashMap::new();
         hands.insert(PlayerPosition::North, hands_vec[0].clone());
@@ -293,7 +304,7 @@ impl GameState {
         hands.insert(PlayerPosition::West, hands_vec[3].clone());
 
         Self {
-            trump,
+            trump: Suit::Clubs,
             player_trump_map: Self::assign_player_trumps(hands.clone()),
             hands,
             current_trick: vec![],
