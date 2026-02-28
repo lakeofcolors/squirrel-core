@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT username, rating, photo_url\n        FROM users\n        WHERE telegram_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "rating",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "photo_url",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "9ebb70d99260a1e497e0e482010e7d62cd05253cca59f5e02d7f2f2c81f74125"
+}
