@@ -2,7 +2,7 @@ use tokio::{sync::mpsc, time::sleep};
 use url::quirks::username;
 use std::{collections::{HashMap, VecDeque}, sync::Mutex, time::{Instant, Duration}};
 
-use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta, PlayerPosition, GameState, Suit, RoomActorCommand, PlayerMeta}, core::context::get_global_context};
+use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta, PlayerPosition, GameState, Suit, RoomActorCommand, PlayerMeta, Team, GameSnapshot, PlayerInfo, Card}, core::context::get_global_context};
 use tracing::info;
 use uuid::Uuid;
 use bimap::BiMap;
@@ -232,6 +232,34 @@ fn start_room_actor(
     players: Vec<PlayerMeta>,
     room_manager_tx: mpsc::UnboundedSender<RoomManagerCommand>,
 ) -> mpsc::UnboundedSender<RoomActorCommand> {
+    fn build_snapshot(
+        room_id: &RoomId,
+        state: &GameState,
+        players: &Vec<PlayerMeta>,
+        player_positions: &BiMap<PlayerId, PlayerPosition>,
+    ) -> GameSnapshot {
+
+        let players_info = players.iter().map(|meta| {
+            let pos = *player_positions.get_by_left(&meta.id).unwrap();
+            PlayerInfo {
+                meta: meta.clone(),
+                position: pos,
+                team: pos.team(),
+            }
+        }).collect();
+
+        GameSnapshot {
+            room_id: room_id.clone(),
+            players: players_info,
+            trump: state.trump,
+            eyes: state.team_eye.clone(),
+            scores: state.team_scores.clone(),
+            current_turn: state.current_turn,
+            current_trick: state.current_trick.clone(),
+            last_trick: state.last_trick.clone()
+        }
+    }
+
     let (tx, mut rx) = mpsc::unbounded_channel();
     let player_ids: Vec<PlayerId> = players.iter().map(|meta| meta.id).collect();
 
@@ -254,18 +282,17 @@ fn start_room_actor(
             player_positions.insert(player.id, *pos);
             app_ctx.connection_pool().send_to(
                 &player.id,
-                WSEvent::GameStart { room_id: room_id.clone(), position: *pos }
-            ).await;
-            app_ctx.connection_pool().send_to(
-                &player.id,
                 WSEvent::YourHand{cards: state.hands.get(pos).unwrap().to_vec()}
             ).await;
-            if state.current_turn == *pos {
-                app_ctx.connection_pool().send_to(
-                    &player.id,
-                    WSEvent::YourTurn
-                ).await
-            }
+        }
+
+        for idx in player_ids.iter(){
+            let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
+            app_ctx.connection_pool().send_to(
+                &idx,
+                WSEvent::GameSnapshot(snapshot)
+            ).await;
+
         }
 
 
@@ -279,30 +306,29 @@ fn start_room_actor(
                                 player_ids.clone(),
                                 WSEvent::CardPlayed{position: *player_position, card}
                             ).await;
+
+                            if let Some(updated_hand) = state.hands.get(player_position) {
+                                app_ctx.connection_pool().send_to(
+                                    &player,
+                                    WSEvent::YourHand {
+                                        cards: updated_hand.clone(),
+                                    }
+                                ).await;
+                            }
+                            // если взятка завершенна
                             if let Some(winner) = state.resolve_trick() {
                                 app_ctx.connection_pool().broadcast(
                                     player_ids.clone(),
-                                    WSEvent::TrickWon{position: winner}
+                                    WSEvent::TrickWon{position: winner, team: winner.team()}
                                 ).await;
+                                // если раунд закончен
                                 if state.hands.values().all(|h| h.is_empty()) {
                                     let _ = state.update_eye_after_round();
+                                    state.update_team_score_afrer_round();
                                     let eye = state.team_eye.clone();
+                                    let _ = state.update_hands(); //
                                     state.update_round_trump();
                                     state.update_round_attacking_team();
-                                    let _ = state.update_hands(); //
-
-                                    app_ctx.connection_pool().broadcast(
-                                        player_ids.clone(),
-                                        WSEvent::EyeUpdated {
-                                            team_a: eye.get(&1).copied().unwrap_or(0),
-                                            team_b: eye.get(&2).copied().unwrap_or(0),
-                                        }
-                                    ).await;
-
-                                    app_ctx.connection_pool().broadcast(
-                                        player_ids.clone(),
-                                        WSEvent::TrumpUpdated { trump: state.trump.clone() }
-                                    ).await;
 
 
                                     for player in &players.clone() {
@@ -312,18 +338,12 @@ fn start_room_actor(
                                                     &player.id,
                                                     WSEvent::YourHand { cards: hand.clone() }
                                                 ).await;
-                                                if state.current_turn == *pos {
-                                                    let _ = app_ctx.connection_pool().send_to(
-                                                        &player.id,
-                                                        WSEvent::YourTurn
-                                                    ).await;
-                                                }
                                             }
                                         }
                                     }
 
 
-                                    if eye.get(&1).copied().unwrap_or(0) >= 12 || eye.get(&2).copied().unwrap_or(0) >= 12 {
+                                    if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= 12 || eye.get(&Team::Uzi).copied().unwrap_or(0) >= 12 {
                                         app_ctx.connection_pool().broadcast(
                                             player_ids.clone(),
                                             WSEvent::GameOver {
@@ -332,21 +352,14 @@ fn start_room_actor(
                                         ).await;
                                         break;
                                     }
-                                } else {
-                                    let player = player_positions.get_by_right(&winner).unwrap();
-                                    app_ctx.connection_pool().send_to(
-                                        &player.clone(),
-                                        WSEvent::YourTurn
-                                    ).await;
                                 }
-
-                            }else{
-                                let player = player_positions.get_by_right(&state.current_turn).unwrap();
-                                app_ctx.connection_pool().send_to(
-                                    &player.clone(),
-                                    WSEvent::YourTurn
-                                ).await;
                             }
+                            let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
+
+                            app_ctx.connection_pool().broadcast(
+                                player_ids.clone(),
+                                WSEvent::GameSnapshot(snapshot)
+                            ).await;
                         }
                         Err(e) => {
                             app_ctx.connection_pool().send_to(
@@ -412,10 +425,11 @@ fn start_room_actor(
 
                             // отправить snapshot
                             let pos = *position;
+                            let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
 
                             app_ctx.connection_pool().send_to(
                                 &player,
-                                WSEvent::GameStart { room_id: room_id.clone(), position: pos }
+                                WSEvent::GameSnapshot (snapshot)
                             ).await;
 
                             app_ctx.connection_pool().send_to(
@@ -424,13 +438,6 @@ fn start_room_actor(
                                     cards: state.hands.get(&pos).unwrap().clone()
                                 }
                             ).await;
-
-                            if state.current_turn == pos {
-                                app_ctx.connection_pool().send_to(
-                                    &player,
-                                    WSEvent::YourTurn
-                                ).await;
-                            }
                         }
                     }
 

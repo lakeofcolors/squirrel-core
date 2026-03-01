@@ -217,28 +217,33 @@ async fn handle_socket(
     };
 
 
-    connection_pool.pool(player_meta.clone(), tx.clone()).await;
-    if let Some(player) = connection_pool.get(&player_id) {
+    let reconnect_room_id = if let Some(existing_player) = connection_pool.get(&player_id) {
         let status = {
-            let guard = player.status.read().await;
+            let guard = existing_player.status.read().await;
             guard.clone()
         };
 
         match status {
-            PlayerStatus::InGame { room_id, disconnected_at, .. } => {
-                connection_pool.pool(player_meta, tx).await;
-                if disconnected_at.is_some(){
-                    let _ = app_ctx.room_manager.send(
-                        RoomManagerCommand::PlayerReconnect {
-                            player: player_id,
-                            room_id: room_id.to_string(),
-                        }
-                    );
-                }
-            }
-            _ => {
-            }
+            PlayerStatus::InGame {
+                room_id,
+                disconnected_at: Some(_),
+                ..
+            } => Some(room_id),
+            _ => None,
         }
+    } else {
+        None
+    };
+
+    connection_pool.pool(player_meta.clone(), tx.clone()).await;
+
+    if let Some(room_id) = reconnect_room_id {
+        let _ = app_ctx.room_manager.send(
+            RoomManagerCommand::PlayerReconnect {
+                player: player_id,
+                room_id,
+            }
+        );
     }
     info!("{} connected to pool", player_id);
 
@@ -301,7 +306,7 @@ async fn handle_socket(
             _ = ping_interval.tick() => {
                 if let Some(player) = connection_pool.get(&player_id) {
                     let last = *player.last_ping.lock().await;
-                    if last.elapsed() > Duration::from_secs(20) {
+                    if last.elapsed() > Duration::from_secs(200) {
                         warn!("Ping timeout for {}", player_id);
                         break;
                     }

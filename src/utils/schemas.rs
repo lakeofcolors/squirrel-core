@@ -262,6 +262,13 @@ pub enum PlayerPosition {
     West,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Team {
+    Kaskyr,
+    Uzi,
+}
+
 impl PlayerPosition {
     pub fn next(&self) -> PlayerPosition {
         match self {
@@ -272,10 +279,10 @@ impl PlayerPosition {
         }
     }
 
-    pub fn team(&self) -> u8 {
+    pub fn team(&self) -> Team {
         match self {
-            PlayerPosition::North | PlayerPosition::South => 1,
-            PlayerPosition::East | PlayerPosition::West => 2,
+            PlayerPosition::North | PlayerPosition::South => Team::Kaskyr,
+            PlayerPosition::East | PlayerPosition::West => Team::Uzi,
         }
     }
 }
@@ -285,11 +292,12 @@ pub struct GameState {
     pub hands: HashMap<PlayerPosition, Vec<Card>>,
     pub trump: Suit,
     pub current_trick: Vec<(PlayerPosition, Card)>,
-    pub team_scores: HashMap<u8, u16>,
-    pub team_eye: HashMap<u8, u16>,
+    pub last_trick: Vec<(PlayerPosition, Card)>,
+    pub team_scores: HashMap<Team, u16>,
+    pub team_eye: HashMap<Team, u16>,
     pub current_turn: PlayerPosition,
     pub is_first_round: bool,
-    pub attacking_team: u8,
+    pub attacking_team: Team,
     pub player_trump_map: HashMap<PlayerPosition, Suit>,
     pub suits_played: HashSet<Suit>
 }
@@ -308,10 +316,11 @@ impl GameState {
             player_trump_map: Self::assign_player_trumps(hands.clone()),
             hands,
             current_trick: vec![],
+            last_trick: vec![],
             suits_played: HashSet::new(),
-            attacking_team: 1,
-            team_scores: HashMap::from([(1, 0), (2, 0)]),
-            team_eye: HashMap::from([(1, 0), (2, 0)]),
+            attacking_team: Team::Kaskyr,
+            team_scores: HashMap::from([(Team::Kaskyr, 0), (Team::Uzi, 0)]),
+            team_eye: HashMap::from([(Team::Kaskyr, 0), (Team::Uzi, 0)]),
             current_turn: PlayerPosition::North,
             is_first_round: true,
         }
@@ -370,29 +379,34 @@ impl GameState {
         self.hands = new_hands;
     }
 
-    pub fn update_eye_after_round(&mut self) -> Option<u8> {
-        let a = self.team_scores.get(&1).copied().unwrap_or(0);
-        let b = self.team_scores.get(&2).copied().unwrap_or(0);
+    pub fn update_team_score_afrer_round(&mut self){
+        *self.team_scores.get_mut(&Team::Kaskyr).unwrap() = 0;
+        *self.team_scores.get_mut(&Team::Uzi).unwrap() = 0;
+    }
+
+    pub fn update_eye_after_round(&mut self) -> Option<Team> {
+        let a = self.team_scores.get(&Team::Kaskyr).copied().unwrap_or(0);
+        let b = self.team_scores.get(&Team::Uzi).copied().unwrap_or(0);
 
         if a == 60 && b == 60 {
-            self.attacking_team = if self.attacking_team == 1 { 2 } else { 1 };
+            self.attacking_team = if self.attacking_team == Team::Kaskyr { Team::Uzi } else { Team::Kaskyr };
             return None;
         }
 
         if a == 120 {
-            *self.team_eye.entry(1).or_insert(0) += 12;
-            return Some(1);
+            *self.team_eye.entry(Team::Kaskyr).or_insert(0) += 12;
+            return Some(Team::Kaskyr);
         }
 
         if b == 120 {
-            *self.team_eye.entry(2).or_insert(0) += 12;
-            return Some(2);
+            *self.team_eye.entry(Team::Uzi).or_insert(0) += 12;
+            return Some(Team::Uzi);
         }
 
         let (winner, loser_score) = if a > b {
-            (1, b)
+            (Team::Kaskyr, b)
         } else {
-            (2, a)
+            (Team::Uzi, a)
         };
 
         let mut eyes = 1;
@@ -471,11 +485,32 @@ impl GameState {
         let team = winner.team();
         *self.team_scores.entry(team).or_insert(0) += trick_points;
 
+        self.last_trick = self.current_trick.clone();
+
         self.current_trick.clear();
         self.current_turn = winner;
 
         Some(winner)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerInfo {
+    pub meta: PlayerMeta,
+    pub position: PlayerPosition,
+    pub team: Team,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameSnapshot {
+    pub room_id: RoomId,
+    pub players: Vec<PlayerInfo>,
+    pub trump: Suit,
+    pub eyes: HashMap<Team, u16>,
+    pub scores: HashMap<Team, u16>,
+    pub current_turn: PlayerPosition,
+    pub current_trick: Vec<(PlayerPosition, Card)>,
+    pub last_trick: Vec<(PlayerPosition, Card)>
 }
 
 
@@ -489,15 +524,12 @@ pub enum WSEvent {
 
     PlayerDisconnected{ position: PlayerPosition },
     SuccessLogin{ username: String },
-    GameStart { room_id: String, position: PlayerPosition },
+    GameSnapshot (GameSnapshot),
     GameClose{reason: String},
     YourHand{cards: Vec<Card>},
-    EyeUpdated{ team_a: u16, team_b: u16 },
-    TrumpUpdated{ trump: Suit },
-    YourTurn,
     CardPlayed{position: PlayerPosition, card: Card},
-    TrickWon{position: PlayerPosition},
-    GameOver{scores: HashMap<u8, u16>}, // team_id -> score
+    TrickWon{position: PlayerPosition, team: Team},
+    GameOver{scores: HashMap<Team, u16>}, // team_id -> score
     Error{detail: String},
 }
 
