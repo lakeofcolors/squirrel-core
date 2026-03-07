@@ -446,11 +446,6 @@ impl GameState {
         if !self.current_trick.is_empty() {
             let lead_card = self.current_trick[0].1;
 
-            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) {
-                return Err("Нельзя играть туза пока он его масть не ссыграла");
-            }
-
-
             let effective_lead_suit = if lead_card.rank == Rank::Jack {
                 self.trump
             } else {
@@ -473,6 +468,31 @@ impl GameState {
 
             if has_effective_lead_suit && !played_matches_effective_lead {
                 return Err("Нужно ходить в масть");
+            }
+            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) {
+                if hand.len() > 1 {
+                    let has_alternative = hand.iter().any(|c| {
+                        if *c == card {
+                            return false;
+                        }
+
+                        let matches_effective = if effective_lead_suit == self.trump {
+                            c.suit == self.trump || c.rank == Rank::Jack
+                        } else {
+                            c.rank != Rank::Jack && c.suit == effective_lead_suit
+                        };
+
+                        if has_effective_lead_suit && !matches_effective {
+                            return false;
+                        }
+
+                        !(c.rank == Rank::Ace && !self.suits_played.contains(&c.suit))
+                    });
+
+                    if has_alternative {
+                        return Err("Нельзя играть туза пока его масть не сыграла");
+                    }
+                }
             }
         }
 
