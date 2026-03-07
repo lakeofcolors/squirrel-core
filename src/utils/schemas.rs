@@ -443,11 +443,12 @@ impl GameState {
         if !hand.contains(&card) {
             return Err("Карты нет в руке");
         }
-        if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) {
-            return Err("Нельзя играть туза пока он его масть не ссыграла");
-        }
         if !self.current_trick.is_empty() {
             let lead_card = self.current_trick[0].1;
+
+            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) {
+                return Err("Нельзя играть туза пока он его масть не ссыграла");
+            }
 
 
             let effective_lead_suit = if lead_card.rank == Rank::Jack {
