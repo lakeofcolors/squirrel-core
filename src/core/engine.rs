@@ -1,8 +1,8 @@
 use tokio::{sync::mpsc, time::sleep};
 use url::quirks::username;
-use std::{collections::{HashMap, VecDeque}, sync::Mutex, time::{Instant, Duration}};
+use std::{collections::{HashMap, VecDeque}, sync::{Mutex, Arc}, time::{Instant, Duration}};
 
-use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta, PlayerPosition, GameState, Suit, RoomActorCommand, PlayerMeta, Team, GameSnapshot, PlayerInfo, Card}, core::context::get_global_context};
+use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta, PlayerPosition, GameState, Suit, RoomActorCommand, PlayerMeta, Team, GameSnapshot, PlayerInfo, Card}, core::{context::get_global_context, pool::PlayerSession}};
 use tracing::info;
 use uuid::Uuid;
 use bimap::BiMap;
@@ -178,11 +178,26 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                    room_subscribers.retain(|p| p != &player);
                }
                RoomManagerCommand::FinishRoom { room_id } => {
-                   rooms.remove(&room_id);
-                    app_ctx.connection_pool().broadcast(
-                        room_subscribers.clone(),
-                        WSEvent::RoomRemoved { room_id },
-                    ).await;
+                    let sessions: Vec<Arc<PlayerSession>> = rooms
+                        .get(&room_id)
+                        .map(|room| {
+                            room.meta.players
+                                .iter()
+                                .filter_map(|p| app_ctx.connection_pool().get(&p.id))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    for session in sessions {
+                        session.mark_as_connected().await;
+                    }
+
+                    if rooms.remove(&room_id).is_some() {
+                        app_ctx.connection_pool().broadcast(
+                            room_subscribers.clone(),
+                            WSEvent::RoomRemoved { room_id },
+                        ).await;
+                    }
                }
                RoomManagerCommand::PlayCard { player, room_id, card } => {
                     let room = rooms.get(&room_id).unwrap(); // NOTE handle unwrap
@@ -269,7 +284,6 @@ fn start_room_actor(
         let mut player_positions: BiMap<PlayerId, PlayerPosition> = BiMap::new();
         let mut state = GameState::new();
         let mut disconnected: HashMap<PlayerId, Instant> = HashMap::new();
-        let mut paused = false;
 
 
         for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
@@ -382,7 +396,7 @@ fn start_room_actor(
                 RoomActorCommand::PlayerTemporaryDisconnect { player } => {
 
                     disconnected.insert(player.clone(), Instant::now());
-                    paused = true;
+                    state.paused = true;
 
                     app_ctx.connection_pool().broadcast(
                         player_ids.clone(),
@@ -442,7 +456,7 @@ fn start_room_actor(
                     }
 
                     if disconnected.is_empty() {
-                        paused = false;
+                        state.paused = false;
                     }
                 }
             };

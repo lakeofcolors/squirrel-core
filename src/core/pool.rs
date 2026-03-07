@@ -97,11 +97,9 @@ impl ConnectionPool{
             players: DashMap::new(),
         }
     }
-
     pub fn get(&self, player_id: &i64) -> Option<Arc<PlayerSession>>{
         self.players.get(player_id).map(|p| p.value().clone())
     }
-
     pub async fn send_to(&self, player_id: &i64, event: WSEvent){
         if let Some(player) = self.get(player_id){
             if player.send(event.clone()).await.is_err() {
@@ -110,7 +108,6 @@ impl ConnectionPool{
             }
         }
     }
-
     pub async fn broadcast<I>(&self, players: I, event: WSEvent)
     where
         I: IntoIterator<Item = i64>,
@@ -119,7 +116,6 @@ impl ConnectionPool{
             self.send_to(&player, event.clone()).await
         }
     }
-
     pub async fn pool(
         &self,
         player_meta: PlayerMeta,
@@ -142,7 +138,6 @@ impl ConnectionPool{
             player.clear_sender().await;
         }
     }
-
     pub async fn disconnect(&self, player_id: &i64){
         if let Some(player) = self.get(player_id) {
             player.mark_as_disconnected().await;
@@ -150,7 +145,6 @@ impl ConnectionPool{
         }
 
     }
-
     pub fn remove(&self, player_id: &i64){
         self.players.remove(player_id);
     }

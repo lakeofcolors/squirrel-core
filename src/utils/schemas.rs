@@ -299,7 +299,8 @@ pub struct GameState {
     pub is_first_round: bool,
     pub attacking_team: Team,
     pub player_trump_map: HashMap<PlayerPosition, Suit>,
-    pub suits_played: HashSet<Suit>
+    pub suits_played: HashSet<Suit>,
+    pub paused: bool,
 }
 
 impl GameState {
@@ -323,6 +324,7 @@ impl GameState {
             team_eye: HashMap::from([(Team::Kaskyr, 0), (Team::Uzi, 0)]),
             current_turn: PlayerPosition::North,
             is_first_round: true,
+            paused: false,
         }
     }
 
@@ -431,48 +433,72 @@ impl GameState {
 
 
     pub fn play_card(&mut self, player: PlayerPosition, card: Card) -> Result<(), &'static str> {
+        if self.paused {
+            return Err("Игра остановленна");
+        }
         if player != self.current_turn {
-            return Err("Not your turn");
+            return Err("Не твой ход");
         }
         let hand = self.hands.get_mut(&player).ok_or("Player not found")?;
         if !hand.contains(&card) {
-            return Err("Card not in hand");
+            return Err("Карты нет в руке");
         }
-
-
+        if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) {
+            return Err("Нельзя играть туза пока он его масть не ссыграла");
+        }
         if !self.current_trick.is_empty() {
-            let lead_suit = self.current_trick[0].1.suit;
-            let has_lead_suit = hand.iter().any(|c| c.suit == lead_suit);
+            let lead_card = self.current_trick[0].1;
 
-            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit){
-                return Err("Cannot play Ace before suit is opened");
-            }
 
-            if card.suit != lead_suit && has_lead_suit {
-                return Err("Must follow suit");
+            let effective_lead_suit = if lead_card.rank == Rank::Jack {
+                self.trump
+            } else {
+                lead_card.suit
+            };
+
+            let has_effective_lead_suit = hand.iter().any(|c| {
+                if effective_lead_suit == self.trump {
+                    c.suit == self.trump || c.rank == Rank::Jack
+                } else {
+                    c.rank != Rank::Jack && c.suit == effective_lead_suit
+                }
+            });
+
+            let played_matches_effective_lead = if effective_lead_suit == self.trump {
+                card.suit == self.trump || card.rank == Rank::Jack
+            } else {
+                card.rank != Rank::Jack && card.suit == effective_lead_suit
+            };
+
+            if has_effective_lead_suit && !played_matches_effective_lead {
+                return Err("Нужно ходить в масть");
             }
         }
+
 
         hand.retain(|&c| c != card);
         self.current_trick.push((player, card));
-        self.current_turn = self.current_turn.next();
+        if self.current_trick.len() < 4 {
+            self.current_turn = self.current_turn.next();
+        }
         Ok(())
     }
 
 
     pub fn resolve_trick(&mut self) -> Option<PlayerPosition> {
-        let lead_suit = self.current_trick[0].1.suit;
-        self.suits_played.insert(lead_suit);
-
         if self.current_trick.len() != 4 {
             return None;
+        }
+        let lead_card = self.current_trick[0].1;
+        if lead_card.rank != Rank::Jack {
+            self.suits_played.insert(lead_card.suit);
         }
         let trump = self.trump;
 
 
         let winner = self.current_trick
             .iter()
-            .max_by_key(|(_, card)| card.power(lead_suit, trump))
+            .max_by_key(|(_, card)| card.power(lead_card.suit, trump))
             .map(|(pos, _)| *pos)
             .unwrap();
 
