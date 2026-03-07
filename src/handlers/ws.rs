@@ -87,7 +87,7 @@ async fn handle_incoming(
             );
 
             if let Some(session) = connection_pool.get(&player_id) {
-                session.mark_as_connected().await;
+                session.mark_back_to_connected().await;
             }
         }
 

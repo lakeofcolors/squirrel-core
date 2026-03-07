@@ -65,16 +65,14 @@ impl PlayerSession{
             *disconnected_at = Some(Instant::now());
         }
     }
-    pub async fn mark_as_connected(&self) {
-        let mut status = self.status.write().await;
+    pub async fn mark_back_to_connected(&self) {
+        *self.status.write().await = PlayerStatus::Connected;
+    }
 
-        match &mut *status {
-            PlayerStatus::InGame { disconnected_at, .. } => {
-                *disconnected_at = None;
-            }
-            _ => {
-                *status = PlayerStatus::Connected;
-            }
+    pub async fn mark_reconnected_in_game(&self) {
+        let mut status = self.status.write().await;
+        if let PlayerStatus::InGame { disconnected_at, .. } = &mut *status {
+            *disconnected_at = None;
         }
     }
     pub async fn mark_as_in_queue(&self){
@@ -122,9 +120,27 @@ impl ConnectionPool{
         sender: tokio::sync::mpsc::UnboundedSender<WSEvent>,
     ) {
         if let Some(player) = self.players.get(&player_meta.id) {
-            player.mark_as_connected().await;
             player.update_sender(sender).await;
             player.update_last_ping().await;
+
+            let status = player.status.read().await.clone();
+            match status {
+                PlayerStatus::InGame {
+                    disconnected_at: Some(_),
+                    ..
+                } => {
+                    player.mark_reconnected_in_game().await;
+                }
+                PlayerStatus::Disconnected => {
+                    player.mark_back_to_connected().await;
+                }
+                PlayerStatus::Connected
+                | PlayerStatus::InQueue
+                | PlayerStatus::InGame {
+                    disconnected_at: None,
+                    ..
+                } => {}
+            }
         } else {
             self.players.insert(
                 player_meta.id,

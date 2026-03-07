@@ -189,7 +189,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         .unwrap_or_default();
 
                     for session in sessions {
-                        session.mark_as_connected().await;
+                        session.mark_back_to_connected().await;
                     }
 
                     if rooms.remove(&room_id).is_some() {
@@ -199,13 +199,31 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         ).await;
                     }
                }
-               RoomManagerCommand::PlayCard { player, room_id, card } => {
-                    let room = rooms.get(&room_id).unwrap(); // NOTE handle unwrap
-                    let _ = room.actor.clone().unwrap().send(
-                        RoomActorCommand::PlayCard { player: player.clone(), card }
-                    );
 
+                RoomManagerCommand::PlayCard { player, room_id, card } => {
+                    let Some(room) = rooms.get(&room_id) else {
+                        app_ctx.connection_pool().send_to(
+                            &player,
+                            WSEvent::Error {
+                                detail: "Комната не найдена".to_string(),
+                            },
+                        ).await;
+                        continue;
+                    };
+
+                    let Some(actor) = room.actor.clone() else {
+                        app_ctx.connection_pool().send_to(
+                            &player,
+                            WSEvent::Error {
+                                detail: "Игра в комнате ещё не началась".to_string(),
+                            },
+                        ).await;
+                        continue;
+                    };
+
+                    let _ = actor.send(RoomActorCommand::PlayCard { player, card });
                 }
+
                 RoomManagerCommand::PlayerDisconnected { player, room_id } => {
                     if let Some(room) = rooms.get(&room_id) {
                         if let Some(actor) = &room.actor {
