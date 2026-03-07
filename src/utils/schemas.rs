@@ -550,6 +550,7 @@ pub enum WSEvent {
     RoomRemoved { room_id: RoomId },
 
     PlayerDisconnected{ position: PlayerPosition },
+    PlayerReconnected { position: PlayerPosition },
     SuccessLogin{ username: String },
     GameSnapshot (GameSnapshot),
     GameClose{reason: String},

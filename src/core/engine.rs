@@ -414,20 +414,25 @@ fn start_room_actor(
                         tokio::time::sleep(Duration::from_secs(30)).await;
 
                         let app_ctx = get_global_context();
+
                         if let Some(session) = app_ctx.connection_pool().get(&player_clone) {
-                            let status = session.status.read().await;
-                            if let PlayerStatus::InGame { disconnected_at: Some(_), .. } = &*status {
-                                let _ = manager_tx_clone.send(
-                                    RoomManagerCommand::PlayerDisconnected {
-                                        player: player_clone,
-                                        room_id: room_id_clone,
-                                    }
-                                );
+                            let status_now = session.status.read().await.clone();
+
+                            if let PlayerStatus::InGame { disconnected_at: Some(ts), .. } = status_now {
+                                if ts.elapsed() >= Duration::from_secs(30) {
+                                    let _ = manager_tx_clone.send(
+                                        RoomManagerCommand::PlayerDisconnected {
+                                            player: player_clone,
+                                            room_id: room_id_clone,
+                                        }
+                                    );
+                                }
                             }
                         }
                     });
                 }
                 RoomActorCommand::PlayerReconnect { player } => {
+
 
                     disconnected.remove(&player);
 
@@ -440,6 +445,11 @@ fn start_room_actor(
                             // отправить snapshot
                             let pos = *position;
                             let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
+
+                            app_ctx.connection_pool().broadcast(
+                                player_ids.clone(),
+                                WSEvent::PlayerReconnected { position: pos }
+                            ).await;
 
                             app_ctx.connection_pool().send_to(
                                 &player,
