@@ -33,6 +33,7 @@ pub struct MeResponse {
     pub username: String,
     pub photo_url: Option<String>,
     pub rating: u64,
+    pub nuts: u64,
 }
 
 #[derive(Serialize)]
@@ -106,7 +107,7 @@ pub async fn me(
     let telegram_id: i64 = auth_user.telegram_id;
 
     let user = sqlx::query!(
-        "SELECT username, rating, photo_url FROM users WHERE telegram_id = $1",
+        "SELECT username, rating, photo_url, free_coins FROM users WHERE telegram_id = $1",
         telegram_id
     )
     .fetch_one(&*pool)
@@ -119,6 +120,7 @@ pub async fn me(
                 username: record.username.unwrap_or_else(|| "anon".into()),
                 photo_url: record.photo_url,
                 rating: record.rating as u64,
+                nuts: record.free_coins as u64,
             };
             (StatusCode::OK, Json(response)).into_response()
         }
