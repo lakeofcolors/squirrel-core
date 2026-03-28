@@ -362,7 +362,7 @@ pub async fn buy_item_for_nuts(
 
     let user_row = sqlx::query(
         r#"
-        SELECT nuts
+        SELECT free_coins as nuts
         FROM users
         WHERE telegram_id = $1
         FOR UPDATE
@@ -640,7 +640,7 @@ async fn handle_successful_payment(
     sqlx::query(
         r#"
         UPDATE users
-        SET nuts = COALESCE(nuts, 0) + $1
+        SET free_coins = COALESCE(nuts, 0) + $1
         WHERE telegram_id = $2
         "#,
     )
