@@ -34,7 +34,7 @@ fn get_store_product(product_id: &str) -> Option<StoreProduct> {
             id: "nuts_250",
             title: "250 орехов",
             description: "Пакет орехов для покупки колод, фонов и косметики",
-            amount_xtr: 250,
+            amount_xtr: 1,
             nuts_amount: 250,
         }),
         "nuts_700" => Some(StoreProduct {
