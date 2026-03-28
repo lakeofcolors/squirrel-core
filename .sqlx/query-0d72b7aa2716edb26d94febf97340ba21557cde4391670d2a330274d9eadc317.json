@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT username, rating, photo_url FROM users WHERE telegram_id = $1",
+  "query": "SELECT username, rating, photo_url, free_coins FROM users WHERE telegram_id = $1",
   "describe": {
     "columns": [
       {
@@ -17,6 +17,11 @@
         "ordinal": 2,
         "name": "photo_url",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "free_coins",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -27,8 +32,9 @@
     "nullable": [
       true,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "30ddce572039e3e02827528c67c7463a83e99842a12f44c93e96ccd0a612cc6b"
+  "hash": "0d72b7aa2716edb26d94febf97340ba21557cde4391670d2a330274d9eadc317"
 }
