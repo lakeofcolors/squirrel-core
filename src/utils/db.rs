@@ -1,7 +1,7 @@
+use dotenvy::dotenv;
 use sqlx::postgres::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
-use dotenvy::dotenv;
 
 pub async fn pg_pool() -> Result<PgPool, sqlx::Error> {
     dotenv().ok();
@@ -14,7 +14,6 @@ pub async fn pg_pool() -> Result<PgPool, sqlx::Error> {
         std::env::var("POSTGRES_DB").unwrap()
     );
 
-
     let pool = PgPoolOptions::new()
         .min_connections(0)
         .max_connections(256)
@@ -23,4 +22,3 @@ pub async fn pg_pool() -> Result<PgPool, sqlx::Error> {
         .await?;
     Ok(pool)
 }
-

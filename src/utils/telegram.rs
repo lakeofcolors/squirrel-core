@@ -1,10 +1,10 @@
+use hex;
 use hmac::{Hmac, Mac};
-use sha2::{Sha256, Digest};
 use serde::Deserialize;
-use std::collections::{BTreeMap};
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use tracing::info;
 use url::form_urlencoded;
-use hex;
 
 #[derive(Debug, Deserialize)]
 pub struct TelegramUser {
@@ -55,9 +55,8 @@ pub fn verify_telegram_auth(init_data: &str, bot_token: &str) -> Result<Telegram
         let user_json = params.get("user").ok_or(())?;
         info!("json: {:?}", user_json);
 
-        let user : TelegramUser = serde_json::from_str(user_json).map_err(|_| ())?;
+        let user: TelegramUser = serde_json::from_str(user_json).map_err(|_| ())?;
         info!("json: {:?}", user);
-
 
         let init_data = TelegramInitData { user };
 

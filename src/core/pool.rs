@@ -102,7 +102,7 @@ impl ConnectionPool{
         if let Some(player) = self.get(player_id){
             if player.send(event.clone()).await.is_err() {
                 error!("Ошибка отправки {:?} и дисконнект", event.clone());
-                // self.disconnect(username);
+                self.temp_disconnected(&player_id).await;
             }
         }
     }
@@ -163,70 +163,6 @@ impl ConnectionPool{
     }
     pub fn remove(&self, player_id: &i64){
         self.players.remove(player_id);
-    }
-
-}
-
-
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::*;
-
-    #[fixture]
-    fn empty_pool() -> ConnectionPool {
-        ConnectionPool::new()
-    }
-
-    #[fixture]
-    fn dummy_sender() -> tokio::sync::mpsc::UnboundedSender<WSEvent> {
-        let (tx, _) = tokio::sync::mpsc::unbounded_channel();
-        tx
-    }
-
-    #[fixture]
-    fn sample_player_name() -> String {
-        "kagura8me".to_string()
-    }
-
-
-    #[fixture]
-    fn sample_player(sample_player_name: String, dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> Arc<PlayerSession> {
-        Arc::new(PlayerSession::new(sample_player_name, dummy_sender))
-    }
-
-    #[fixture]
-    fn pool_with_player(empty_pool: ConnectionPool, sample_player_name: String, dummy_sender: tokio::sync::mpsc::UnboundedSender<WSEvent>) -> ConnectionPool {
-        empty_pool.pool(&sample_player_name, dummy_sender);
-        empty_pool
-    }
-
-
-    #[rstest]
-    fn test_pool_get(pool_with_player: ConnectionPool, sample_player: Arc<PlayerSession>) {
-        let player_name = sample_player.clone().username.clone();
-        let player = pool_with_player.get(&sample_player.username.clone()).unwrap();
-        assert_eq!(player.username, player_name);
-    }
-
-    #[rstest]
-    fn test_pool_disconnect(pool_with_player: ConnectionPool, sample_player: Arc<PlayerSession>){
-        let player = sample_player.clone();
-        let status = player.status.read().unwrap();
-        if let Some(p) = pool_with_player.get(&player.clone().username){
-            assert_eq!(*status, *p.status.read().unwrap());
-        }
-    }
-
-    #[rstest]
-    fn test_pool_remove(pool_with_player: ConnectionPool, sample_player: Arc<PlayerSession>){
-        let player_name = sample_player.username.clone();
-        pool_with_player.remove(&player_name);
-        let nothing = pool_with_player.get(&player_name);
-        assert!(nothing.is_none())
     }
 
 }

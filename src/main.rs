@@ -10,10 +10,12 @@ use crate::core::{context::{AppContext, set_global_context}, engine::start_room_
 // use crate::utils::jwt::handle_auth;
 use crate::handlers::auth::{telegram_login, me};
 use crate::handlers::ws::ws_handler;
+use crate::handlers::store::{telegram_update_webhook, create_invoice, buy_item_for_nuts, start_rewarded_session};
 use crate::utils::db::pg_pool;
 pub mod handlers;
 pub mod utils;
 pub mod core;
+pub mod config;
 use std::sync::Arc;
 use tower_http::cors::{CorsLayer, Any};
 use axum::http::{Method, HeaderName};
@@ -53,6 +55,8 @@ async fn main() {
         .route("/v1/ws", get(ws_handler))
         .route("/auth/login", post(telegram_login))
         .route("/auth/me", get(me))
+        .route("/v1/store/invoice", post(create_invoice))
+        .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))
         .layer(TraceLayer::new_for_http());

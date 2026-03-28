@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use crate::utils::schemas::{RoomManagerCommand, QueueCommand};
+use crate::config::settings::{AppSettings};
 
 #[derive(Debug)]
 pub struct AppContext{
@@ -11,6 +12,7 @@ pub struct AppContext{
     pub room_manager: mpsc::UnboundedSender<RoomManagerCommand>,
     pub queue_manager: mpsc::UnboundedSender<QueueCommand>,
     pub db_pool: PgPool,
+    pub config: AppSettings
 }
 
 static GLOBAL_CONTEXT: OnceCell<Arc<AppContext>> = OnceCell::new();
@@ -34,7 +36,8 @@ impl AppContext {
             connection_pool: Arc::new(ConnectionPool::new()),
             room_manager,
             queue_manager,
-            db_pool
+            db_pool,
+            config: AppSettings::new(),
         }
     }
 

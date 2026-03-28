@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{error, info};
 
-use crate::{utils::telegram::verify_telegram_auth, core::context::AppContext};
+use crate::{utils::{telegram::verify_telegram_auth, jwt::AuthUser}, core::context::AppContext};
 use crate::utils::jwt::{generate_token, validate_token};
 
 #[derive(Deserialize)]
@@ -100,33 +100,10 @@ pub async fn telegram_login(
 
 pub async fn me(
     Extension(app_ctx): Extension<Arc<AppContext>>,
-    headers: HeaderMap
+    auth_user: AuthUser,
 ) -> impl IntoResponse {
     let pool = &app_ctx.db_pool;
-    let auth_header = match headers.get("authorization") {
-        Some(value) => value,
-        None => return (StatusCode::UNAUTHORIZED, "Missing auth header").into_response(),
-    };
-
-    let auth_str = match auth_header.to_str() {
-        Ok(v) => v,
-        Err(_) => return (StatusCode::UNAUTHORIZED, "Invalid auth header").into_response(),
-    };
-
-    let token = match auth_str.strip_prefix("Bearer ") {
-        Some(t) => t,
-        None => return (StatusCode::UNAUTHORIZED, "Invalid auth scheme").into_response(),
-    };
-
-    let claims = match validate_token(token) {
-        Ok(c) => c,
-        Err(err) => {
-            error!("Invalid token: {:?}", err);
-            return (StatusCode::UNAUTHORIZED, "Incorrect token").into_response()
-        }
-    };
-
-    let telegram_id: i64 = claims.sub;
+    let telegram_id: i64 = auth_user.telegram_id;
 
     let user = sqlx::query!(
         "SELECT username, rating, photo_url FROM users WHERE telegram_id = $1",
