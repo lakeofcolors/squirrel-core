@@ -417,7 +417,7 @@ pub async fn buy_item_for_nuts(
     sqlx::query(
         r#"
         UPDATE users
-        SET nuts = $1
+        SET free_coins = $1
         WHERE telegram_id = $2
         "#,
     )
