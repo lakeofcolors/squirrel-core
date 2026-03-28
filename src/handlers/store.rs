@@ -640,7 +640,7 @@ async fn handle_successful_payment(
     sqlx::query(
         r#"
         UPDATE users
-        SET free_coins = COALESCE(nuts, 0) + $1
+        SET free_coins = COALESCE(free_coins, 0) + $1
         WHERE telegram_id = $2
         "#,
     )
