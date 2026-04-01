@@ -19,6 +19,37 @@ use crate::utils::jwt::AuthUser;
    STORE PRODUCTS
 ========================= */
 
+#[derive(Debug, Serialize)]
+pub struct StoreNutsPackDto {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub nuts_amount: i64,
+    pub bonus_nuts_amount: i64,
+    pub is_featured: bool,
+    pub price_xtr: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StoreCosmeticDto {
+    pub id: String,           // deck_pink
+    pub item_type: String,    // deck | background
+    pub item_key: String,     // pink / fire
+    pub title: String,
+    pub price_nuts: i64,
+    pub rarity: String,
+    pub owned: bool,
+    pub equipped: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StoreResponse {
+    pub nuts_packs: Vec<StoreNutsPackDto>,
+    pub decks: Vec<StoreCosmeticDto>,
+    pub backgrounds: Vec<StoreCosmeticDto>,
+    pub balance_nuts: i64,
+}
+
 #[derive(Debug, Clone)]
 struct StoreProduct {
     id: &'static str,
@@ -81,7 +112,6 @@ pub struct CreateInvoiceResponse {
 pub struct BuyItemForNutsRequest {
     pub item_type: String, // "deck" | "background"
     pub item_id: String,
-    pub price_nuts: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -203,6 +233,190 @@ fn parse_invoice_payload(payload: &str) -> Result<(String, i64, String, i64), St
         .map_err(|_| "Invalid nuts_amount in payload".to_string())?;
 
     Ok((order_id, user_id, product_id, nuts_amount))
+}
+
+pub async fn get_store(
+    auth_user: AuthUser,
+    Extension(app_ctx): Extension<Arc<AppContext>>,
+) -> Result<Json<StoreResponse>, (StatusCode, String)> {
+    let telegram_id = auth_user.telegram_id;
+
+    // =========================
+    // USER BALANCE
+    // =========================
+    let user_row = sqlx::query(
+        r#"
+        SELECT free_coins::BIGINT AS free_coins
+        FROM users
+        WHERE telegram_id = $1
+        "#,
+    )
+    .bind(telegram_id)
+    .fetch_one(&app_ctx.db_pool)
+    .await
+    .map_err(|_| (StatusCode::NOT_FOUND, "User not found".to_string()))?;
+
+    let balance_nuts: i64 = user_row.try_get("free_coins").map_err(|e| {
+        error!("Failed to read free_coins: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to read user balance".to_string(),
+        )
+    })?;
+
+    // =========================
+    // NUTS PACKS
+    // =========================
+    let packs = sqlx::query(
+        r#"
+        SELECT id, title, description, nuts_amount, is_featured, bonus_nuts_amount, xtr_amount
+        FROM store_nuts_packs
+        WHERE is_active = TRUE
+        ORDER BY sort_order
+        "#,
+    )
+    .fetch_all(&app_ctx.db_pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "packs error".to_string()))?;
+
+    let nuts_packs = packs
+        .into_iter()
+        .map(|r| StoreNutsPackDto {
+            id: r.try_get("id").unwrap(),
+            title: r.try_get("title").unwrap(),
+            description: r.try_get("description").ok(),
+            nuts_amount: r.try_get("nuts_amount").unwrap(),
+            is_featured: r.try_get("is_featured").unwrap(),
+            bonus_nuts_amount: r.try_get("bonus_nuts_amount").unwrap(),
+            price_xtr: r.try_get("xtr_amount").unwrap(),
+        })
+        .collect::<Vec<_>>();
+
+    // =========================
+    // COSMETICS
+    // =========================
+    let cosmetics = sqlx::query(
+        r#"
+        SELECT
+            c.*,
+            (ui.id IS NOT NULL) as owned,
+            CASE
+                WHEN c.item_type = 'deck' THEN COALESCE(uei.equipped_deck_id = c.item_key, FALSE)
+                WHEN c.item_type = 'background' THEN COALESCE(uei.equipped_background_id = c.item_key, FALSE)
+                ELSE FALSE
+            END as equipped
+        FROM store_cosmetics c
+        LEFT JOIN user_inventory ui
+            ON ui.telegram_id = $1
+            AND ui.item_type = c.item_type
+            AND ui.item_id = c.item_key
+        LEFT JOIN user_equipped_items uei
+            ON uei.telegram_id = $1
+        WHERE c.is_active = TRUE
+        ORDER BY c.sort_order
+        "#,
+    )
+    .bind(telegram_id)
+    .fetch_all(&app_ctx.db_pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "cosmetics error".to_string()))?;    let mut decks = vec![];
+
+    let mut backgrounds = vec![];
+
+    for row in cosmetics {
+        let dto = StoreCosmeticDto {
+            id: row.try_get("id").unwrap(),
+            item_type: row.try_get("item_type").unwrap(),
+            item_key: row.try_get("item_key").unwrap(),
+            title: row.try_get("title").unwrap(),
+            price_nuts: row.try_get("price_nuts").unwrap(),
+            rarity: row.try_get("rarity").unwrap(),
+            owned: row.try_get("owned").unwrap_or(false),
+            equipped: row.try_get("equipped").unwrap_or(false),
+        };
+
+        if dto.item_type == "deck" {
+            decks.push(dto);
+        } else {
+            backgrounds.push(dto);
+        }
+    }
+
+    Ok(Json(StoreResponse {
+        nuts_packs,
+        decks,
+        backgrounds,
+        balance_nuts,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EquipItemRequest {
+    pub item_type: String, // deck | background
+    pub item_id: String,
+}
+
+pub async fn equip_item(
+    auth_user: AuthUser,
+    Extension(app_ctx): Extension<Arc<AppContext>>,
+    Json(req): Json<EquipItemRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let telegram_id = auth_user.telegram_id;
+
+    // проверка что есть в инвентаре
+    let exists = sqlx::query(
+        r#"
+        SELECT id FROM user_inventory
+        WHERE telegram_id = $1 AND item_type = $2 AND item_id = $3
+        "#,
+    )
+    .bind(telegram_id)
+    .bind(&req.item_type)
+    .bind(&req.item_id)
+    .fetch_optional(&app_ctx.db_pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "check error".to_string()))?;
+
+    if exists.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "Item not owned".to_string()));
+    }
+
+    // upsert equipped
+    match req.item_type.as_str() {
+        "deck" => {
+            sqlx::query(
+                r#"
+                INSERT INTO user_equipped_items (telegram_id, equipped_deck_id)
+                VALUES ($1, $2)
+                ON CONFLICT (telegram_id)
+                DO UPDATE SET equipped_deck_id = $2, updated_at = NOW()
+                "#,
+            )
+            .bind(telegram_id)
+            .bind(&req.item_id)
+            .execute(&app_ctx.db_pool)
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "equip error".to_string()))?;
+        }
+        "background" => {
+            sqlx::query(
+                r#"
+                INSERT INTO user_equipped_items (telegram_id, equipped_background_id)
+                VALUES ($1, $2)
+                ON CONFLICT (telegram_id)
+                DO UPDATE SET equipped_background_id = $2, updated_at = NOW()
+                "#,
+            )
+            .bind(telegram_id)
+            .bind(&req.item_id)
+            .execute(&app_ctx.db_pool)
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "equip error".to_string()))?;
+        }
+        _ => return Err((StatusCode::BAD_REQUEST, "Invalid type".to_string())),
+    }
+
+    Ok(StatusCode::OK)
 }
 
 async fn answer_pre_checkout_query(
@@ -352,6 +566,10 @@ pub async fn buy_item_for_nuts(
 ) -> Result<Json<BuyItemForNutsResponse>, (StatusCode, String)> {
     let telegram_id = auth_user.telegram_id;
 
+    if req.item_type != "deck" && req.item_type != "background" {
+        return Err((StatusCode::BAD_REQUEST, "Invalid item_type".to_string()));
+    }
+
     let mut tx = app_ctx.db_pool.begin().await.map_err(|e| {
         error!("Failed to begin transaction: {:?}", e);
         (
@@ -360,9 +578,52 @@ pub async fn buy_item_for_nuts(
         )
     })?;
 
+    let cosmetic_row = sqlx::query(
+        r#"
+        SELECT id, item_type, item_key, price_nuts, is_active
+        FROM store_cosmetics
+        WHERE item_type = $1 AND item_key = $2
+        "#,
+    )
+    .bind(&req.item_type)
+    .bind(&req.item_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| {
+        error!("Failed to fetch cosmetic item: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch store item".to_string(),
+        )
+    })?;
+
+    let Some(cosmetic_row) = cosmetic_row else {
+        return Err((StatusCode::BAD_REQUEST, "Unknown item".to_string()));
+    };
+
+    let is_active: bool = cosmetic_row.try_get("is_active").map_err(|e| {
+        error!("Failed to read is_active: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to read item state".to_string(),
+        )
+    })?;
+
+    if !is_active {
+        return Err((StatusCode::BAD_REQUEST, "Item is not active".to_string()));
+    }
+
+    let price_nuts: i64 = cosmetic_row.try_get("price_nuts").map_err(|e| {
+        error!("Failed to read price_nuts: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to read item price".to_string(),
+        )
+    })?;
+
     let user_row = sqlx::query(
         r#"
-        SELECT free_coins as nuts
+        SELECT free_coins::BIGINT AS nuts
         FROM users
         WHERE telegram_id = $1
         FOR UPDATE
@@ -375,7 +636,6 @@ pub async fn buy_item_for_nuts(
         error!("Failed to fetch user nuts: {:?}", e);
         (StatusCode::NOT_FOUND, "User not found".to_string())
     })?;
-
     let current_nuts: i64 = user_row.try_get("nuts").map_err(|e| {
         error!("Failed to read nuts: {:?}", e);
         (
@@ -383,10 +643,6 @@ pub async fn buy_item_for_nuts(
             "Failed to read balance".to_string(),
         )
     })?;
-
-    if current_nuts < req.price_nuts {
-        return Err((StatusCode::BAD_REQUEST, "Not enough nuts".to_string()));
-    }
 
     let existing = sqlx::query(
         r#"
@@ -412,7 +668,11 @@ pub async fn buy_item_for_nuts(
         return Err((StatusCode::BAD_REQUEST, "Item already owned".to_string()));
     }
 
-    let new_balance = current_nuts - req.price_nuts;
+    if current_nuts < price_nuts {
+        return Err((StatusCode::BAD_REQUEST, "Not enough nuts".to_string()));
+    }
+
+    let new_balance = current_nuts - price_nuts;
 
     sqlx::query(
         r#"
@@ -471,7 +731,7 @@ pub async fn buy_item_for_nuts(
         "#,
     )
     .bind(telegram_id)
-    .bind(-req.price_nuts)
+    .bind(-price_nuts)
     .bind(format!("buy:{}:{}", req.item_type, req.item_id))
     .execute(&mut *tx)
     .await

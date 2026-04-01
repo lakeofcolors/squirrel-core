@@ -34,11 +34,18 @@ pub struct MeResponse {
     pub photo_url: Option<String>,
     pub rating: u64,
     pub nuts: u64,
+    pub equipped_deck: String,
+    pub equipped_background: String,
 }
 
 #[derive(Serialize)]
 pub struct TokenResponse {
     pub access_token: String,
+    pub refresh_token: String,
+}
+
+#[derive(Deserialize)]
+pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
@@ -78,8 +85,34 @@ pub async fn telegram_login(
             .fetch_one(&*pool)
             .await;
 
+            let _ = sqlx::query!(
+                r#"
+                INSERT INTO user_inventory (telegram_id, item_type, item_id)
+                VALUES
+                    ($1, 'deck', 'classic'),
+                    ($1, 'background', 'neon')
+                ON CONFLICT (telegram_id, item_type, item_id) DO NOTHING
+                "#,
+                telegram_id
+            )
+            .execute(&*pool)
+            .await;
+
+            let _ = sqlx::query!(
+                r#"
+                INSERT INTO user_equipped_items (telegram_id, equipped_deck_id, equipped_background_id)
+                VALUES
+                ($1, 'classic', 'neon')
+                ON CONFLICT (telegram_id) DO NOTHING
+                "#,
+                telegram_id
+            )
+            .execute(&*pool)
+            .await;
+
+
             match (
-                generate_token(telegram_id, Some(3600)),       // 1 hour
+                generate_token(telegram_id, Some(7200)),       // 2 hour
                 generate_token(telegram_id, Some(7 * 24 * 3600)) // 7 days
             ) {
                 (Ok(access_token), Ok(refresh_token)) => {
@@ -99,6 +132,37 @@ pub async fn telegram_login(
     }
 }
 
+pub async fn refresh_token(
+    Json(payload): Json<RefreshRequest>,
+) -> impl IntoResponse {
+    match validate_token(&payload.refresh_token) {
+        Ok(claims) => {
+            let telegram_id = claims.sub;
+
+            match (
+                generate_token(telegram_id, Some(7200)),
+                generate_token(telegram_id, Some(7 * 24 * 3600))
+            ) {
+                (Ok(access_token), Ok(refresh_token)) => {
+                    let response = TokenResponse {
+                        access_token,
+                        refresh_token,
+                    };
+                    (StatusCode::OK, Json(response)).into_response()
+                }
+                _ => {
+                    error!("JWT generation failed during token refresh");
+                    (StatusCode::INTERNAL_SERVER_ERROR, "JWT generation failed").into_response()
+                }
+            }
+        }
+        Err(err) => {
+            error!("Refresh token validation failed: {:?}", err);
+            (StatusCode::UNAUTHORIZED, "Invalid or expired refresh token").into_response()
+        }
+    }
+}
+
 pub async fn me(
     Extension(app_ctx): Extension<Arc<AppContext>>,
     auth_user: AuthUser,
@@ -107,8 +171,11 @@ pub async fn me(
     let telegram_id: i64 = auth_user.telegram_id;
 
     let user = sqlx::query!(
-        "SELECT username, rating, photo_url, free_coins FROM users WHERE telegram_id = $1",
-        telegram_id
+        "SELECT username, rating, photo_url, free_coins, uei.equipped_deck_id as equipped_deck, uei.equipped_background_id as equipped_background  FROM users u
+         LEFT JOIN user_equipped_items uei
+         ON uei.telegram_id = u.telegram_id
+         WHERE u.telegram_id = $1",
+         telegram_id
     )
     .fetch_one(&*pool)
     .await;
@@ -121,6 +188,8 @@ pub async fn me(
                 photo_url: record.photo_url,
                 rating: record.rating as u64,
                 nuts: record.free_coins as u64,
+                equipped_deck: record.equipped_deck.unwrap_or_else(|| "classic".into()),
+                equipped_background: record.equipped_background.unwrap_or_else(|| "neon".into()),
             };
             (StatusCode::OK, Json(response)).into_response()
         }

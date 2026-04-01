@@ -6,9 +6,9 @@ use axum::{
 };
 use tracing::info;
 use tracing_subscriber;
-use crate::core::{context::{AppContext, set_global_context}, engine::start_room_manager};
+use crate::{core::{context::{AppContext, set_global_context}, engine::start_room_manager}, handlers::store::{equip_item, get_store}};
 // use crate::utils::jwt::handle_auth;
-use crate::handlers::auth::{telegram_login, me};
+use crate::handlers::auth::{telegram_login, me, refresh_token};
 use crate::handlers::ws::ws_handler;
 use crate::handlers::store::{telegram_update_webhook, create_invoice, buy_item_for_nuts, start_rewarded_session};
 use crate::utils::db::pg_pool;
@@ -54,8 +54,12 @@ async fn main() {
     let router = Router::new()
         .route("/v1/ws", get(ws_handler))
         .route("/auth/login", post(telegram_login))
+        .route("/auth/refresh", post(refresh_token))
         .route("/auth/me", get(me))
         .route("/v1/store/invoice", post(create_invoice))
+        .route("/v1/store", get(get_store))
+        .route("/v1/store/equip", post(equip_item))
+        .route("/v1/store/buy", post(buy_item_for_nuts))
         .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))
