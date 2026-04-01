@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO user_inventory (telegram_id, item_type, item_id)\n                VALUES\n                    ($1, 'deck', 'classic'),\n                    ($1, 'background', 'neon')\n                ON CONFLICT (telegram_id, item_type, item_id) DO NOTHING\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba8839c265685a18d1a12e8fa10ae0f35f087b0f613751e057d5ec3c8948cb6a"
+}
