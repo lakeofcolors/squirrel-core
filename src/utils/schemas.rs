@@ -21,6 +21,19 @@ pub struct PlayerMeta{
     pub username: Option<String>,
     pub rating: i32,
     pub photo_url: Option<String>,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub is_bot: bool,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub bot_difficulty: Option<BotDifficulty>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BotDifficulty {
+    Medium,
+    Hard,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -29,11 +42,12 @@ pub enum Currency {
     Virtual,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RoomKind {
     Private,
     Open,
     Queue,
+    BotMatch,
 }
 
 
@@ -73,6 +87,11 @@ pub enum RoomManagerCommand {
         players: Vec<PlayerId>,
         password_hash: Option<Hash>,
         kind: RoomKind
+    },
+    CreateBotRoom {
+        key: QueueKey,
+        player: PlayerId,
+        difficulty: BotDifficulty,
     },
     JoinRoom { player: PlayerId, room_id: RoomId },
     LeaveRoom { player: PlayerId, room_id: RoomId },
@@ -609,6 +628,7 @@ pub struct SubManageMsg {
 pub enum WSIncomingMessage {
     FindGame{stake: Decimal, currency: Currency, league: League},
     CancelSearch{stake: Decimal, currency: Currency, league: League},
+    PlayWithBots{stake: Decimal, currency: Currency, league: League, difficulty: BotDifficulty},
     CreateRoom{stake: Decimal, currency: Currency, league: League, password_hash: Option<Hash>},
     JoinRoom { room_id: RoomId },
     LeaveRoom { room_id: RoomId },

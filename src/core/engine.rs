@@ -99,6 +99,56 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         room.actor = Some(room_actor);
                     }
                 }
+                RoomManagerCommand::CreateBotRoom { key, player, difficulty } => {
+                    let room_id = Uuid::new_v4().to_string();
+                    let stake_value = key.stake.to_i32().unwrap_or(0);
+
+                    let real_player_meta = match app_ctx.connection_pool().get(&player) {
+                        Some(session) => session.player_meta.clone(),
+                        None => { continue; }
+                    };
+
+                    let mut players_meta = vec![real_player_meta];
+                    for i in 1..=3 {
+                        players_meta.push(PlayerMeta {
+                            id: -(i as i64),
+                            username: Some(format!("Bot {}", i)),
+                            rating: 0,
+                            photo_url: None,
+                            is_bot: true,
+                            bot_difficulty: Some(difficulty.clone()),
+                        });
+                    }
+
+                    let room_meta = RoomMeta{
+                        id: room_id.clone(),
+                        name: "Игра с ботами".to_string(),
+                        key,
+                        players: players_meta.clone(),
+                        kind: RoomKind::BotMatch
+                    };
+
+                    let room = rooms.entry(room_id.clone())
+                         .or_insert(Room{
+                             actor: None,
+                             meta: room_meta.clone(),
+                             password_hash: None,
+                             created_at: Instant::now()
+                         });
+
+                    app_ctx.connection_pool().broadcast(
+                        room_subscribers.clone(),
+                        WSEvent::RoomCreated { room: room_meta }
+                    ).await;
+
+                    let room_actor = start_room_actor(
+                        room_id,
+                        players_meta,
+                        manager_tx.clone(),
+                        stake_value
+                    );
+                    room.actor = Some(room_actor);
+                }
                 RoomManagerCommand::LeaveAllRoom { player } => {
                     let mut empty_room_ids: Vec<RoomId> = Vec::new();
 
@@ -315,6 +365,10 @@ async fn process_game_rewards(
 ) {
     if players.len() != 4 { return; }
 
+    if players.iter().any(|p| p.is_bot) {
+        return;
+    }
+
     let team_kaskyr = vec![players[0].id, players[2].id];
     let team_uzi = vec![players[1].id, players[3].id];
     
@@ -457,6 +511,7 @@ fn start_room_actor(
     let (tx, mut rx) = mpsc::unbounded_channel();
     let player_ids: Vec<PlayerId> = players.iter().map(|meta| meta.id).collect();
 
+    let tx_actor = tx.clone();
     tokio::spawn(async move {
         // let mut subs: Vec<mpsc::UnboundedSender<WSEvent>> = Vec::new();
         let app_ctx = get_global_context();
@@ -470,7 +525,9 @@ fn start_room_actor(
                 if let Some(session) = app_ctx.connection_pool().get(&player.id) {
                     session.mark_as_in_game(room_id.clone(), *pos).await;
                 } else {
-                    warn!("Player {} dropped immediately after room start", player.id);
+                    if !player.is_bot {
+                        warn!("Player {} dropped immediately after room start", player.id);
+                    }
                 }
                 player_positions.insert(player.id, *pos);
                 app_ctx.connection_pool().send_to(
@@ -491,6 +548,25 @@ fn start_room_actor(
 
         }
 
+
+        let trigger_bot_turn = |current_turn: PlayerPosition, state: &GameState, players: &Vec<PlayerMeta>, player_positions: &BiMap<PlayerId, PlayerPosition>, tx: mpsc::UnboundedSender<RoomActorCommand>| {
+            if let Some(bot_id) = player_positions.get_by_right(&current_turn) {
+                if let Some(meta) = players.iter().find(|p| p.id == *bot_id) {
+                    if meta.is_bot && !state.paused {
+                        let difficulty = meta.bot_difficulty.clone().unwrap_or(crate::utils::schemas::BotDifficulty::Medium);
+                        let best_card = crate::core::bot::determine_bot_move(state, current_turn, difficulty);
+                        let tx_clone = tx.clone();
+                        let bot_id_val = *bot_id;
+                        tokio::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                            let _ = tx_clone.send(RoomActorCommand::PlayCard { player: bot_id_val, card: best_card });
+                        });
+                    }
+                }
+            }
+        };
+
+        trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
 
         while let Some(cmd) = rx.recv().await {
             debug!("Room {} processing ActorCommand: {:?}", room_id, cmd);
@@ -567,6 +643,8 @@ fn start_room_actor(
                                 player_ids.clone(),
                                 WSEvent::GameSnapshot(snapshot)
                             ).await;
+                            
+                            trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
                         }
                         Err(e) => {
                             app_ctx.connection_pool().send_to(

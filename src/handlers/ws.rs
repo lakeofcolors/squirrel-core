@@ -116,6 +116,28 @@ async fn handle_incoming(
             }
         }
 
+        WSIncomingMessage::PlayWithBots { stake, currency, league, difficulty } => {
+            if let Some(session) = connection_pool.get(&player_id) {
+                let status = session.status.read().await.clone();
+                if status != PlayerStatus::Connected {
+                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    return;
+                }
+            }
+
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::CreateBotRoom {
+                    player: player_id,
+                    key: QueueKey {
+                        stake,
+                        currency,
+                        league,
+                    },
+                    difficulty,
+                },
+            );
+        }
+
         WSIncomingMessage::CreateRoom {
             stake,
             currency,
@@ -242,7 +264,7 @@ async fn handle_socket(
     let (tx, mut rx) = mpsc::unbounded_channel::<WSEvent>();
     let connection_pool = app_ctx.connection_pool();
 
-    let profile = match sqlx::query_as!(PlayerMeta,
+    let profile = match sqlx::query!(
         r#"
         SELECT telegram_id as id, username, rating, photo_url
         FROM users
@@ -264,13 +286,17 @@ async fn handle_socket(
             id: player_id,
             username: p.username,
             photo_url: p.photo_url,
-            rating: p.rating,   // если нужно
+            rating: p.rating,
+            is_bot: false,
+            bot_difficulty: None,
         },
         None => PlayerMeta {
             id: player_id,
             username: None,
             photo_url: None,
             rating: 0,
+            is_bot: false,
+            bot_difficulty: None,
         },
     };
 
