@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE friend_requests SET status = 'declined', responded_at = NOW() WHERE id = $1 AND to_telegram_id = $2 RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2880f51d0f0a5f47ea20af86de2d48c2cee7ada27b9c22ed29f6a5863137cfd3"
+}

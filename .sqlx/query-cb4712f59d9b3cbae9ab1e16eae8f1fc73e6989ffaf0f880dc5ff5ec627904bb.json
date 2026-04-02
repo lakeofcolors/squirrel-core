@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cb4712f59d9b3cbae9ab1e16eae8f1fc73e6989ffaf0f880dc5ff5ec627904bb"
+}

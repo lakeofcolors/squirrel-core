@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, 'Ranked 2v2', $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cea7aa826bdd014c4205d03b2383df9dd4be55ea64579fe18f42c02d2252bef1"
+}

@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH RankedUsers AS (\n            SELECT telegram_id, username, photo_url, rating,\n                   ROW_NUMBER() OVER (ORDER BY rating DESC) as rank\n            FROM users\n            WHERE ($1 = 'All'\n               OR ($1 = 'Bronze'  AND rating <= 500)\n               OR ($1 = 'Silver'  AND rating > 500 AND rating <= 1000)\n               OR ($1 = 'Gold'    AND rating > 1000 AND rating <= 2000)\n               OR ($1 = 'Diamond' AND rating > 2000))\n        ),\n        MyRank AS (\n            SELECT rank FROM RankedUsers WHERE telegram_id = $2\n        )\n        SELECT telegram_id, username, photo_url, rating, rank\n        FROM RankedUsers\n        WHERE rank <= 50\n           OR (rank >= COALESCE((SELECT rank FROM MyRank), 0) - 2 \n           AND rank <= COALESCE((SELECT rank FROM MyRank), 0) + 2)\n           OR telegram_id = $2\n        ORDER BY rank ASC;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "telegram_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "photo_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "rating",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "rank",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "997afde4bfc8ed385236535836eec004dfdc1aeadf62324b19696f60b866f80d"
+}
