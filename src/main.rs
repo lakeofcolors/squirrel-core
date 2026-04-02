@@ -11,6 +11,9 @@ use crate::{core::{context::{AppContext, set_global_context}, engine::start_room
 use crate::handlers::auth::{telegram_login, me, refresh_token};
 use crate::handlers::ws::ws_handler;
 use crate::handlers::store::{telegram_update_webhook, create_invoice, buy_item_for_nuts, start_rewarded_session};
+use crate::handlers::rating::get_leaderboard;
+use crate::handlers::profile::get_profile;
+use crate::handlers::friends::{get_friends, consume_invite, send_request, get_requests, accept_request, decline_request};
 use crate::utils::db::pg_pool;
 pub mod handlers;
 pub mod utils;
@@ -60,6 +63,13 @@ async fn main() {
         .route("/v1/store", get(get_store))
         .route("/v1/store/equip", post(equip_item))
         .route("/v1/store/buy", post(buy_item_for_nuts))
+        .route("/v1/rating", get(get_leaderboard))
+        .route("/v1/profile", get(get_profile))
+        .route("/v1/friends", get(get_friends))
+        .route("/v1/friends/invite/consume", post(consume_invite))
+        .route("/v1/friends/requests", post(send_request).get(get_requests))
+        .route("/v1/friends/requests/:id/accept", post(accept_request))
+        .route("/v1/friends/requests/:id/decline", post(decline_request))
         .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))

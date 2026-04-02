@@ -89,6 +89,7 @@ pub enum RoomManagerCommand {
     PlayerDisconnected { player: PlayerId, room_id: RoomId },
 }
 
+#[derive(Debug)]
 pub enum RoomActorCommand{
     PlayCard{ player: PlayerId, card: Card},
     PlayerTemporaryDisconnect{ player: PlayerId },

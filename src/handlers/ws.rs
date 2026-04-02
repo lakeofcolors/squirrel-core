@@ -58,6 +58,31 @@ async fn handle_incoming(
     match incoming {
 
         WSIncomingMessage::FindGame { stake, currency, league } => {
+            let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&stake).unwrap_or(0);
+            if stake_val > 0 {
+                let check_coins = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player_id)
+                    .fetch_one(&app_ctx.db_pool)
+                    .await;
+                match check_coins {
+                    Ok(row) => {
+                        if row.free_coins < stake_val {
+                            if let Some(session) = connection_pool.get(&player_id) {
+                                let _ = session.send(WSEvent::Error { detail: "Недостаточно орехов для этой ставки".to_string() }).await;
+                            }
+                            return;
+                        }
+                    }
+                    Err(_) => return,
+                }
+            }
+            if let Some(session) = connection_pool.get(&player_id) {
+                let status = session.status.read().await.clone();
+                if status != PlayerStatus::Connected {
+                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    return;
+                }
+            }
+
             let _ = app_ctx.queue_manager.send(
                 QueueCommand::Enqueue {
                     player: player_id,
@@ -97,6 +122,31 @@ async fn handle_incoming(
             league,
             password_hash,
         } => {
+            let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&stake).unwrap_or(0);
+            if stake_val > 0 {
+                let check_coins = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player_id)
+                    .fetch_one(&app_ctx.db_pool)
+                    .await;
+                match check_coins {
+                    Ok(row) => {
+                        if row.free_coins < stake_val {
+                            if let Some(session) = connection_pool.get(&player_id) {
+                                let _ = session.send(WSEvent::Error { detail: "Недостаточно орехов для этой ставки".to_string() }).await;
+                            }
+                            return;
+                        }
+                    }
+                    Err(_) => return,
+                }
+            }
+            if let Some(session) = connection_pool.get(&player_id) {
+                let status = session.status.read().await.clone();
+                if status != PlayerStatus::Connected {
+                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    return;
+                }
+            }
+
             let _ = app_ctx.room_manager.send(
                 RoomManagerCommand::CreateRoom {
                     key: QueueKey {
@@ -116,6 +166,14 @@ async fn handle_incoming(
         }
 
         WSIncomingMessage::JoinRoom { room_id } => {
+            if let Some(session) = connection_pool.get(&player_id) {
+                let status = session.status.read().await.clone();
+                if status != PlayerStatus::Connected {
+                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    return;
+                }
+            }
+
             let _ = app_ctx.room_manager.send(
                 RoomManagerCommand::JoinRoom {
                     player: player_id,

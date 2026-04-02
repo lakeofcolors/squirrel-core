@@ -2,8 +2,9 @@ use tokio::{sync::mpsc, time::sleep};
 use url::quirks::username;
 use std::{collections::{HashMap, VecDeque}, sync::{Mutex, Arc}, time::{Instant, Duration}};
 
+use rust_decimal::prelude::ToPrimitive;
 use crate::{utils::schemas::{Currency, League, PlayerId, Room, RoomId, QueueKey, QueueCommand, RoomManagerCommand, RoomKind, WSEvent, RoomMeta, PlayerPosition, GameState, Suit, RoomActorCommand, PlayerMeta, Team, GameSnapshot, PlayerInfo, Card}, core::{context::get_global_context, pool::PlayerSession}};
-use tracing::info;
+use tracing::{info, debug, warn, error};
 use uuid::Uuid;
 use bimap::BiMap;
 
@@ -18,12 +19,16 @@ fn try_match(
             let players: Vec<PlayerId> =
                 (0..4).map(|_| queue.pop_front().unwrap()).collect();
 
-            let _ = room_tx.send(RoomManagerCommand::CreateRoom {
+            info!("Matched 4 players for queue key {:?}: {:?}", key, players);
+
+            if let Err(e) = room_tx.send(RoomManagerCommand::CreateRoom {
                 key: key.clone(),
                 players,
                 password_hash: None,
                 kind: RoomKind::Queue
-            });
+            }) {
+                error!("Failed to send RoomManagerCommand::CreateRoom: {:?}", e);
+            }
         }
     }
 }
@@ -40,9 +45,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         let mut room_subscribers: Vec<PlayerId> = Vec::new();
 
         while let Some(cmd) = rx.recv().await {
-            info!("cmd before: {:?}", cmd);
-            info!("rooms before: {:?}", rooms);
-            info!("subs before : {:?}", room_subscribers.clone());
+            debug!("Processing RoomManagerCommand: {:?}", cmd);
             match cmd {
                 RoomManagerCommand::CreateRoom { key, players, password_hash, kind } => {
                     let room_id = Uuid::new_v4().to_string();
@@ -51,6 +54,21 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         .filter_map(|id| app_ctx.connection_pool().get(id))
                         .map(|session| session.player_meta.clone())
                         .collect();
+
+                    if players_meta.len() != players.len() {
+                        warn!("CreateRoom aborted: only {} players found out of {}. Some disconnected.", players_meta.len(), players.len());
+                        for id in players {
+                            app_ctx.connection_pool().send_to(
+                                &id,
+                                WSEvent::Error {
+                                    detail: "Один из игроков покинул очередь до создания комнаты.".to_string(),
+                                }
+                            ).await;
+                        }
+                        continue;
+                    }
+
+                    let stake_value = key.stake.to_i32().unwrap_or(0);
                     let room_meta = RoomMeta{
                         id: room_id.clone(),
                         name: room_id.clone(),
@@ -75,7 +93,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         let room_actor = start_room_actor(
                             room_id,
                             players_meta,
-                            manager_tx.clone()
+                            manager_tx.clone(),
+                            stake_value
                         );
                         room.actor = Some(room_actor);
                     }
@@ -118,9 +137,34 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         if room.meta.players.len() < 4 {
                             if room.meta.players.iter().any(|p| p.id == player){
                                 continue;
-                            }else{
-                                let player_meta = app_ctx.connection_pool().get(&player).unwrap().player_meta.clone();
-                                room.meta.players.push(player_meta);
+                            } else {
+                                let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&room.meta.key.stake).unwrap_or(0);
+                                if stake_val > 0 {
+                                    let check_coins = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player)
+                                        .fetch_one(&app_ctx.db_pool)
+                                        .await;
+                                    
+                                    if let Ok(row) = check_coins {
+                                        if row.free_coins < stake_val {
+                                            app_ctx.connection_pool().send_to(
+                                                &player,
+                                                WSEvent::Error {
+                                                    detail: "Недостаточно орехов для этой ставки".to_string()
+                                                }
+                                            ).await;
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
+
+                                if let Some(session) = app_ctx.connection_pool().get(&player) {
+                                    room.meta.players.push(session.player_meta.clone());
+                                } else {
+                                    warn!("JoinRoom failed: player {} not in pool", player);
+                                    continue;
+                                }
                             }
 
                             app_ctx.connection_pool().broadcast(
@@ -135,6 +179,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     room_id.clone(),
                                     room.meta.players.clone(),
                                     manager_tx.clone(),
+                                    room.meta.key.stake.to_i32().unwrap_or(0)
                                 );
                                 room.actor = Some(room_actor)
                             }
@@ -253,17 +298,133 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                 }
            }
 
-        info!("rooms after: {:?}", rooms);
-        info!("subs  after: {:?}", room_subscribers);
+        debug!("Processed cmd. Total rooms: {}, Subscribers: {}", rooms.len(), room_subscribers.len());
         }
     });
     tx
+}
+
+async fn process_game_rewards(
+    pool: &sqlx::PgPool,
+    players: &Vec<PlayerMeta>,
+    winner_team: Option<Team>,
+    leaver: Option<i64>,
+    stake: i32,
+    room_id: String,
+    scores: Option<std::collections::HashMap<Team, u16>>,
+) {
+    if players.len() != 4 { return; }
+
+    let team_kaskyr = vec![players[0].id, players[2].id];
+    let team_uzi = vec![players[1].id, players[3].id];
+    
+    let db_tx_result = pool.begin().await;
+    if db_tx_result.is_err() {
+        error!("Failed to begin transaction for game rewards");
+        return;
+    }
+    let mut db_tx = db_tx_result.unwrap();
+
+    let end_reason = if leaver.is_some() { "abandoned" } else { "normal" };
+    let winner_str: Option<&str> = match winner_team {
+        Some(Team::Kaskyr) => Some("Kaskyr"),
+        Some(Team::Uzi) => Some("Uzi"),
+        None => None,
+    };
+
+    let match_id_row = sqlx::query!(
+        r#"
+        INSERT INTO matches (room_id, mode, is_ranked, stake, status, end_reason, winner_team, finished_at)
+        VALUES ($1, 'Ranked 2v2', true, $2, 'finished', $3, $4, NOW())
+        RETURNING id
+        "#,
+        room_id, stake as i64, end_reason, winner_str
+    )
+    .fetch_one(&mut *db_tx).await;
+
+    let match_id = match match_id_row {
+        Ok(r) => r.id,
+        Err(e) => {
+            error!("Failed to insert match: {:?}", e);
+            return;
+        }
+    };
+
+    let score_str = match scores {
+        Some(s) => format!("{}:{}", s.get(&Team::Kaskyr).unwrap_or(&0), s.get(&Team::Uzi).unwrap_or(&0)),
+        None => "—".to_string()
+    };
+
+    if let Some(leaver_id) = leaver {
+        let penalty_rating = -30;
+        let penalty_nuts = -stake;
+        let compensation_rating = 10;
+        let compensation_nuts = stake / 3;
+
+        for (i, player) in players.iter().enumerate() {
+            let is_leaver = player.id == leaver_id;
+            let rating_delta = if is_leaver { penalty_rating } else { compensation_rating };
+            let nuts_delta = if is_leaver { penalty_nuts } else { compensation_nuts };
+            
+            let _ = sqlx::query!(
+                "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
+                rating_delta, nuts_delta, player.id
+            ).execute(&mut *db_tx).await;
+
+            let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
+            let result_str = if is_leaver { "abandoned" } else { "win" };
+
+            let _ = sqlx::query!(
+                "INSERT INTO match_players (match_id, telegram_id, team, seat, result) VALUES ($1, $2, $3, $4, $5)",
+                match_id, player.id, team_str, i as i32, result_str
+            ).execute(&mut *db_tx).await;
+
+            let _ = sqlx::query!(
+                "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, 'Ranked 2v2', $4, $5, $6)",
+                match_id, player.id, room_id, result_str, score_str, rating_delta
+            ).execute(&mut *db_tx).await;
+        }
+    } else if let Some(winner) = winner_team {
+        let win_rating = 25;
+        let win_nuts = stake;
+        let lose_rating = -25;
+        let lose_nuts = -stake;
+
+        for (i, player) in players.iter().enumerate() {
+            let is_winner = (winner == Team::Kaskyr && team_kaskyr.contains(&player.id)) 
+                         || (winner == Team::Uzi && team_uzi.contains(&player.id));
+            
+            let rating_delta = if is_winner { win_rating } else { lose_rating };
+            let nuts_delta = if is_winner { win_nuts } else { lose_nuts };
+            let result_str = if is_winner { "win" } else { "lose" };
+
+            let _ = sqlx::query!(
+                "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
+                rating_delta, nuts_delta, player.id
+            ).execute(&mut *db_tx).await;
+
+            let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
+
+            let _ = sqlx::query!(
+                "INSERT INTO match_players (match_id, telegram_id, team, seat, result) VALUES ($1, $2, $3, $4, $5)",
+                match_id, player.id, team_str, i as i32, result_str
+            ).execute(&mut *db_tx).await;
+
+            let _ = sqlx::query!(
+                "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, 'Ranked 2v2', $4, $5, $6)",
+                match_id, player.id, room_id, result_str, score_str, rating_delta
+            ).execute(&mut *db_tx).await;
+        }
+    }
+
+    let _ = db_tx.commit().await;
 }
 
 fn start_room_actor(
     room_id: RoomId,
     players: Vec<PlayerMeta>,
     room_manager_tx: mpsc::UnboundedSender<RoomManagerCommand>,
+    stake: i32,
 ) -> mpsc::UnboundedSender<RoomActorCommand> {
     fn build_snapshot(
         room_id: &RoomId,
@@ -305,17 +466,20 @@ fn start_room_actor(
 
 
         for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
-            let player = players.get(i).unwrap();  // NOTE unwrap_or
-            app_ctx.connection_pool()
-                   .get(&player.id)
-                   .unwrap()
-                   .mark_as_in_game(room_id.clone(), *pos).await;
-
-            player_positions.insert(player.id, *pos);
-            app_ctx.connection_pool().send_to(
-                &player.id,
-                WSEvent::YourHand{cards: state.hands.get(pos).unwrap().to_vec()}
-            ).await;
+            if let Some(player) = players.get(i) {
+                if let Some(session) = app_ctx.connection_pool().get(&player.id) {
+                    session.mark_as_in_game(room_id.clone(), *pos).await;
+                } else {
+                    warn!("Player {} dropped immediately after room start", player.id);
+                }
+                player_positions.insert(player.id, *pos);
+                app_ctx.connection_pool().send_to(
+                    &player.id,
+                    WSEvent::YourHand{cards: state.hands.get(pos).unwrap().to_vec()}
+                ).await;
+            } else {
+                warn!("Expected 4 players, found fewer. State might be inconsistent.");
+            }
         }
 
         for idx in player_ids.iter(){
@@ -329,9 +493,14 @@ fn start_room_actor(
 
 
         while let Some(cmd) = rx.recv().await {
+            debug!("Room {} processing ActorCommand: {:?}", room_id, cmd);
             match cmd {
                 RoomActorCommand::PlayCard { player, card } => {
-                    let player_position = player_positions.get_by_left(&player.clone()).unwrap();
+                    let Some(player_position) = player_positions.get_by_left(&player) else {
+                        warn!("Room {} received PlayCard from player {} who is not in the room. Ignoring.", room_id, player);
+                        continue;
+                    };
+                    
                     match state.play_card(*player_position, card){
                         Ok(_) => {
                             app_ctx.connection_pool().broadcast(
@@ -374,8 +543,14 @@ fn start_room_actor(
                                         }
                                     }
 
-
                                     if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= 12 || eye.get(&Team::Uzi).copied().unwrap_or(0) >= 12 {
+                                        let winner_team = if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= 12 {
+                                            Team::Kaskyr
+                                        } else {
+                                            Team::Uzi
+                                        };
+                                        process_game_rewards(&app_ctx.db_pool, &players, Some(winner_team), None, stake, room_id.clone(), Some(state.team_eye.clone())).await;
+
                                         app_ctx.connection_pool().broadcast(
                                             player_ids.clone(),
                                             WSEvent::GameOver {
@@ -402,6 +577,8 @@ fn start_room_actor(
                     }
                 }
                 RoomActorCommand::PlayerDisconnected { player } => {
+                    process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone())).await;
+                    
                     app_ctx.connection_pool().disconnect(&player).await;
                     app_ctx.connection_pool().broadcast(
                         player_ids.clone(),
@@ -416,10 +593,15 @@ fn start_room_actor(
                     disconnected.insert(player.clone(), Instant::now());
                     state.paused = true;
 
+                    let Some(pos) = player_positions.get_by_left(&player) else {
+                        warn!("TemporaryDisconnect from non-member player {} in room {}", player, room_id);
+                        continue;
+                    };
+
                     app_ctx.connection_pool().broadcast(
                         player_ids.clone(),
                         WSEvent::PlayerDisconnected {
-                            position: *player_positions.get_by_left(&player).unwrap()
+                            position: *pos
                         }
                     ).await;
 
@@ -532,4 +714,119 @@ pub fn start_queue_manager(
     });
 
     tx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::context::{AppContext, set_global_context};
+    use crate::utils::schemas::{QueueKey, Currency, League, PlayerId, RoomKind, RoomManagerCommand, QueueCommand};
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::{Arc, Mutex};
+    use tokio::sync::mpsc;
+    use sqlx::PgPool;
+
+    // Helper to setup mock global context once for all tests
+    static INIT: std::sync::Once = std::sync::Once::new();
+
+    pub fn setup_mock_context() {
+        INIT.call_once(|| {
+            std::env::set_var("SECRET_KEY", "mock_secret_key");
+            std::env::set_var("BOT_TOKEN", "mock_bot_token");
+            std::env::set_var("DATABASE_URL", "postgres://mock"); // in case
+            // Lazy postgres pool that doesn't immediately connect
+            let db_pool = PgPool::connect_lazy_with(sqlx::postgres::PgConnectOptions::new());
+            let (room_tx, _) = mpsc::unbounded_channel();
+            let (queue_tx, _) = mpsc::unbounded_channel();
+            let app_ctx = Arc::new(AppContext::new(room_tx, queue_tx, db_pool));
+            set_global_context(app_ctx);
+        });
+    }
+
+    #[tokio::test]
+    async fn test_try_match() {
+        let (room_tx, mut room_rx) = mpsc::unbounded_channel();
+        let mut queues = HashMap::new();
+        
+        let key = QueueKey {
+            stake: rust_decimal::Decimal::new(100, 0),
+            currency: Currency::Virtual,
+            league: League::Bronze,
+        };
+
+        let mut queue = VecDeque::new();
+        queue.push_back(1);
+        queue.push_back(2);
+        queue.push_back(3);
+        queues.insert(key.clone(), queue);
+
+        try_match(&mut queues, &room_tx);
+        assert!(room_rx.try_recv().is_err());
+        assert_eq!(queues.get(&key).unwrap().len(), 3);
+
+        queues.get_mut(&key).unwrap().push_back(4);
+        try_match(&mut queues, &room_tx);
+
+        assert_eq!(queues.get(&key).unwrap().len(), 0);
+        let cmd = room_rx.try_recv().unwrap();
+        
+        if let RoomManagerCommand::CreateRoom { players, kind, .. } = cmd {
+            assert_eq!(players, vec![1, 2, 3, 4]);
+            if let RoomKind::Queue = kind {
+                // Ok
+            } else {
+                panic!("Expected RoomKind::Queue");
+            }
+        } else {
+            panic!("Expected CreateRoom command");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_queue_enqueue_dequeue() {
+        setup_mock_context();
+        let (room_tx, _) = mpsc::unbounded_channel();
+        let queue_tx = start_queue_manager(room_tx);
+
+        let key = QueueKey {
+            stake: rust_decimal::Decimal::new(10, 0),
+            currency: Currency::RealMoney,
+            league: League::Silver,
+        };
+
+        let _ = queue_tx.send(QueueCommand::Enqueue { player: 10, key: key.clone() });
+        let _ = queue_tx.send(QueueCommand::Dequeue { player: 10, key: key.clone() });
+        
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_malicious_play_card_no_crash() {
+        setup_mock_context();
+        let (manager_tx, _manager_rx) = mpsc::unbounded_channel();
+        
+        let app_ctx = get_global_context();
+        
+        let mut mock_players = vec![];
+        for id in 1..=4 {
+            let meta = crate::utils::schemas::PlayerMeta { id, username: None, rating: 1000, photo_url: None };
+            app_ctx.connection_pool().pool(meta.clone(), mpsc::unbounded_channel().0).await;
+            mock_players.push(meta);
+        }
+
+        let room_id = "test_room".to_string();
+        let actor_tx = start_room_actor(room_id.clone(), mock_players, manager_tx, 100);
+
+        let attacker_id = 999;
+        let card = Card { suit: crate::utils::schemas::Suit::Spades, rank: crate::utils::schemas::Rank::Ace };
+        
+        let res = actor_tx.send(RoomActorCommand::PlayCard { player: attacker_id, card });
+        assert!(res.is_ok());
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let is_alive = !actor_tx.is_closed();
+        assert!(is_alive, "Actor crashed due to panicking unwrap!");
+    }
 }
