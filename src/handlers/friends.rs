@@ -81,6 +81,10 @@ pub async fn get_friends(
                     online = false;
                     status_str = "Недавно был(а)".to_string();
                 }
+                PlayerStatus::Spectating { .. } => {
+                    online = true;
+                    status_str = "Наблюдает".to_string();
+                }
             }
         }
 

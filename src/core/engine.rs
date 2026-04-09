@@ -182,12 +182,24 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         ).await;
                     }
                 }
-                RoomManagerCommand::JoinRoom { player, room_id } => {
+                RoomManagerCommand::JoinRoom { player, room_id, password } => {
                     if let Some(room) = rooms.get_mut(&room_id) {
                         if room.meta.players.len() < 4 {
                             if room.meta.players.iter().any(|p| p.id == player){
                                 continue;
                             } else {
+                                if let Some(room_pwd) = &room.password_hash {
+                                    if password != Some(room_pwd.clone()) {
+                                        app_ctx.connection_pool().send_to(
+                                            &player,
+                                            WSEvent::Error {
+                                                detail: "Неверный пароль".to_string()
+                                            }
+                                        ).await;
+                                        continue;
+                                    }
+                                }
+
                                 let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&room.meta.key.stake).unwrap_or(0);
                                 if stake_val > 0 {
                                     let check_coins = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player)
@@ -257,13 +269,19 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         }
                     }
                 }
+                RoomManagerCommand::SurrenderRoom { player, room_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if let Some(actor) = &room.actor {
+                            let _ = actor.send(RoomActorCommand::PlayerSurrendered { player });
+                        }
+                    }
+                }
                 RoomManagerCommand::SubscribeRooms{ player } => {
                     if !room_subscribers.contains(&player) {
                         room_subscribers.push(player.clone());
                     }
                    let snapshot: Vec<RoomMeta> = rooms
                        .values()
-                       .filter(|room| room.meta.players.len() < 4)
                        .map(|room| room.meta.clone())
                        .collect();
 
@@ -346,6 +364,28 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         }
                     }
                 }
+                RoomManagerCommand::SpectateRoom { player, room_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if room.meta.players.iter().any(|p| p.id == player) {
+                            app_ctx.connection_pool().send_to(&player, WSEvent::Error { detail: "Вы уже находитесь в этой игре".to_string() }).await;
+                            continue;
+                        }
+                        if let Some(actor) = &room.actor {
+                            let _ = actor.send(RoomActorCommand::AddSpectator { player });
+                        } else {
+                            app_ctx.connection_pool().send_to(&player, WSEvent::Error { detail: "Игра еще не началась".to_string() }).await;
+                        }
+                    } else {
+                        app_ctx.connection_pool().send_to(&player, WSEvent::Error { detail: "Комната не найдена".to_string() }).await;
+                    }
+                }
+                RoomManagerCommand::UnspectateRoom { player, room_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if let Some(actor) = &room.actor {
+                            let _ = actor.send(RoomActorCommand::RemoveSpectator { player });
+                        }
+                    }
+                }
            }
 
         debug!("Processed cmd. Total rooms: {}, Subscribers: {}", rooms.len(), room_subscribers.len());
@@ -365,9 +405,7 @@ async fn process_game_rewards(
 ) {
     if players.len() != 4 { return; }
 
-    if players.iter().any(|p| p.is_bot) {
-        return;
-    }
+    let is_bot_match = players.iter().any(|p| p.is_bot);
 
     let team_kaskyr = vec![players[0].id, players[2].id];
     let team_uzi = vec![players[1].id, players[3].id];
@@ -379,6 +417,9 @@ async fn process_game_rewards(
     }
     let mut db_tx = db_tx_result.unwrap();
 
+    let is_ranked = !is_bot_match;
+    let mode_str = if is_bot_match { "Bot Match" } else { "Ranked 2v2" };
+
     let end_reason = if leaver.is_some() { "abandoned" } else { "normal" };
     let winner_str: Option<&str> = match winner_team {
         Some(Team::Kaskyr) => Some("Kaskyr"),
@@ -386,18 +427,26 @@ async fn process_game_rewards(
         None => None,
     };
 
-    let match_id_row = sqlx::query!(
+    let match_id_row = sqlx::query(
         r#"
         INSERT INTO matches (room_id, mode, is_ranked, stake, status, end_reason, winner_team, finished_at)
-        VALUES ($1, 'Ranked 2v2', true, $2, 'finished', $3, $4, NOW())
+        VALUES ($1, $2, $3, $4, 'finished', $5, $6, NOW())
         RETURNING id
-        "#,
-        room_id, stake as i64, end_reason, winner_str
+        "#
     )
+    .bind(&room_id)
+    .bind(mode_str)
+    .bind(is_ranked)
+    .bind(stake as i64)
+    .bind(end_reason)
+    .bind(winner_str)
     .fetch_one(&mut *db_tx).await;
 
-    let match_id = match match_id_row {
-        Ok(r) => r.id,
+    let match_id: i64 = match match_id_row {
+        Ok(r) => {
+            use sqlx::Row;
+            r.try_get("id").unwrap_or(0)
+        },
         Err(e) => {
             error!("Failed to insert match: {:?}", e);
             return;
@@ -409,6 +458,8 @@ async fn process_game_rewards(
         None => "—".to_string()
     };
 
+    let mode_str = if is_bot_match { "Bot Match" } else { "Ranked 2v2" };
+
     if let Some(leaver_id) = leaver {
         let penalty_rating = -30;
         let penalty_nuts = -stake;
@@ -416,14 +467,20 @@ async fn process_game_rewards(
         let compensation_nuts = stake / 3;
 
         for (i, player) in players.iter().enumerate() {
+            if player.is_bot {
+                continue;
+            }
+
             let is_leaver = player.id == leaver_id;
-            let rating_delta = if is_leaver { penalty_rating } else { compensation_rating };
-            let nuts_delta = if is_leaver { penalty_nuts } else { compensation_nuts };
+            let rating_delta = if is_bot_match { 0 } else if is_leaver { penalty_rating } else { compensation_rating };
+            let nuts_delta = if is_bot_match { 0 } else if is_leaver { penalty_nuts } else { compensation_nuts };
             
-            let _ = sqlx::query!(
-                "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
-                rating_delta, nuts_delta, player.id
-            ).execute(&mut *db_tx).await;
+            if !is_bot_match {
+                let _ = sqlx::query!(
+                    "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
+                    rating_delta, nuts_delta, player.id
+                ).execute(&mut *db_tx).await;
+            }
 
             let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
             let result_str = if is_leaver { "abandoned" } else { "win" };
@@ -433,10 +490,17 @@ async fn process_game_rewards(
                 match_id, player.id, team_str, i as i32, result_str
             ).execute(&mut *db_tx).await;
 
-            let _ = sqlx::query!(
-                "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, 'Ranked 2v2', $4, $5, $6)",
-                match_id, player.id, room_id, result_str, score_str, rating_delta
-            ).execute(&mut *db_tx).await;
+            let _ = sqlx::query(
+                "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            )
+            .bind(match_id)
+            .bind(player.id)
+            .bind(&room_id)
+            .bind(mode_str)
+            .bind(result_str)
+            .bind(&score_str)
+            .bind(rating_delta)
+            .execute(&mut *db_tx).await;
         }
     } else if let Some(winner) = winner_team {
         let win_rating = 25;
@@ -445,17 +509,23 @@ async fn process_game_rewards(
         let lose_nuts = -stake;
 
         for (i, player) in players.iter().enumerate() {
+            if player.is_bot {
+                continue;
+            }
+
             let is_winner = (winner == Team::Kaskyr && team_kaskyr.contains(&player.id)) 
                          || (winner == Team::Uzi && team_uzi.contains(&player.id));
             
-            let rating_delta = if is_winner { win_rating } else { lose_rating };
-            let nuts_delta = if is_winner { win_nuts } else { lose_nuts };
+            let rating_delta = if is_bot_match { 0 } else if is_winner { win_rating } else { lose_rating };
+            let nuts_delta = if is_bot_match { 0 } else if is_winner { win_nuts } else { lose_nuts };
             let result_str = if is_winner { "win" } else { "lose" };
 
-            let _ = sqlx::query!(
-                "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
-                rating_delta, nuts_delta, player.id
-            ).execute(&mut *db_tx).await;
+            if !is_bot_match {
+                let _ = sqlx::query!(
+                    "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
+                    rating_delta, nuts_delta, player.id
+                ).execute(&mut *db_tx).await;
+            }
 
             let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
 
@@ -464,10 +534,17 @@ async fn process_game_rewards(
                 match_id, player.id, team_str, i as i32, result_str
             ).execute(&mut *db_tx).await;
 
-            let _ = sqlx::query!(
-                "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, 'Ranked 2v2', $4, $5, $6)",
-                match_id, player.id, room_id, result_str, score_str, rating_delta
-            ).execute(&mut *db_tx).await;
+            let _ = sqlx::query(
+                "INSERT INTO match_history (match_id, telegram_id, room_id, mode, result, score, rating_delta) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            )
+            .bind(match_id)
+            .bind(player.id)
+            .bind(&room_id)
+            .bind(mode_str)
+            .bind(result_str)
+            .bind(&score_str)
+            .bind(rating_delta)
+            .execute(&mut *db_tx).await;
         }
     }
 
@@ -500,6 +577,7 @@ fn start_room_actor(
             room_id: room_id.clone(),
             players: players_info,
             trump: state.trump,
+            club_jack_owner: state.club_jack_owner,
             eyes: state.team_eye.clone(),
             scores: state.team_scores.clone(),
             current_turn: state.current_turn,
@@ -518,6 +596,7 @@ fn start_room_actor(
         let mut player_positions: BiMap<PlayerId, PlayerPosition> = BiMap::new();
         let mut state = GameState::new();
         let mut disconnected: HashMap<PlayerId, Instant> = HashMap::new();
+        let mut spectators: std::collections::HashSet<PlayerId> = std::collections::HashSet::new();
 
 
         for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
@@ -579,8 +658,11 @@ fn start_room_actor(
                     
                     match state.play_card(*player_position, card){
                         Ok(_) => {
+                            let mut all_targets = player_ids.clone();
+                            all_targets.extend(spectators.iter());
+
                             app_ctx.connection_pool().broadcast(
-                                player_ids.clone(),
+                                all_targets.clone(),
                                 WSEvent::CardPlayed{position: *player_position, card}
                             ).await;
 
@@ -594,8 +676,11 @@ fn start_room_actor(
                             }
                             // если взятка завершенна
                             if let Some(winner) = state.resolve_trick() {
+                                let mut all_targets = player_ids.clone();
+                                all_targets.extend(spectators.iter());
+
                                 app_ctx.connection_pool().broadcast(
-                                    player_ids.clone(),
+                                    all_targets.clone(),
                                     WSEvent::TrickWon{position: winner, team: winner.team()}
                                 ).await;
                                 // если раунд закончен
@@ -627,8 +712,11 @@ fn start_room_actor(
                                         };
                                         process_game_rewards(&app_ctx.db_pool, &players, Some(winner_team), None, stake, room_id.clone(), Some(state.team_eye.clone())).await;
 
+                                        let mut all_targets = player_ids.clone();
+                                        all_targets.extend(spectators.iter());
+
                                         app_ctx.connection_pool().broadcast(
-                                            player_ids.clone(),
+                                            all_targets.clone(),
                                             WSEvent::GameOver {
                                                 scores: state.team_eye.clone()
                                             }
@@ -639,8 +727,11 @@ fn start_room_actor(
                             }
                             let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
 
+                            let mut all_targets = player_ids.clone();
+                            all_targets.extend(spectators.iter());
+
                             app_ctx.connection_pool().broadcast(
-                                player_ids.clone(),
+                                all_targets.clone(),
                                 WSEvent::GameSnapshot(snapshot)
                             ).await;
                             
@@ -658,8 +749,12 @@ fn start_room_actor(
                     process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone())).await;
                     
                     app_ctx.connection_pool().disconnect(&player).await;
+
+                    let mut all_targets = player_ids.clone();
+                    all_targets.extend(spectators.iter());
+
                     app_ctx.connection_pool().broadcast(
-                        player_ids.clone(),
+                        all_targets.clone(),
                         WSEvent::GameClose {
                             reason: format!("Player {} disconnected", player),
                         },
@@ -676,8 +771,11 @@ fn start_room_actor(
                         continue;
                     };
 
+                    let mut all_targets = player_ids.clone();
+                    all_targets.extend(spectators.iter());
+
                     app_ctx.connection_pool().broadcast(
-                        player_ids.clone(),
+                        all_targets.clone(),
                         WSEvent::PlayerDisconnected {
                             position: *pos
                         }
@@ -724,8 +822,11 @@ fn start_room_actor(
                             let pos = *position;
                             let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
 
+                            let mut all_targets = player_ids.clone();
+                            all_targets.extend(spectators.iter());
+
                             app_ctx.connection_pool().broadcast(
-                                player_ids.clone(),
+                                all_targets.clone(),
                                 WSEvent::PlayerReconnected { position: pos }
                             ).await;
 
@@ -747,7 +848,61 @@ fn start_room_actor(
                         state.paused = false;
                     }
                 }
+                RoomActorCommand::PlayerSurrendered { player } => {
+                    let mut all_targets = player_ids.clone();
+                    all_targets.extend(spectators.iter());
+
+                    let _ = app_ctx.connection_pool().broadcast(
+                        all_targets.clone(),
+                        WSEvent::GameClose {
+                            reason: format!("Игрок покинул игру/сдался"),
+                        },
+                    ).await;
+
+                    // Automatically trigger the same processing as an abandoned match
+                    let _ = room_manager_tx.send(
+                        RoomManagerCommand::PlayerDisconnected {
+                            player: player,
+                            room_id: room_id.clone(),
+                        }
+                    );
+                    break;
+                }
+                RoomActorCommand::AddSpectator { player } => {
+                    spectators.insert(player);
+                    if let Some(session) = app_ctx.connection_pool().get(&player) {
+                        session.mark_as_spectating(room_id.clone()).await;
+                        let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
+                        let _ = session.send(WSEvent::GameSnapshot(snapshot)).await;
+                    }
+
+                    let mut all_targets = player_ids.clone();
+                    all_targets.extend(spectators.iter());
+                    let _ = app_ctx.connection_pool().broadcast(
+                        all_targets,
+                        WSEvent::SpectatorCountUpdated { count: spectators.len() }
+                    ).await;
+                }
+                RoomActorCommand::RemoveSpectator { player } => {
+                    spectators.remove(&player);
+                    if let Some(session) = app_ctx.connection_pool().get(&player) {
+                        let _ = session.mark_back_to_connected().await;
+                    }
+
+                    let mut all_targets = player_ids.clone();
+                    all_targets.extend(spectators.iter());
+                    let _ = app_ctx.connection_pool().broadcast(
+                        all_targets,
+                        WSEvent::SpectatorCountUpdated { count: spectators.len() }
+                    ).await;
+                }
             };
+        }
+
+        for spec in spectators {
+            if let Some(session) = app_ctx.connection_pool().get(&spec) {
+                let _ = session.mark_back_to_connected().await;
+            }
         }
 
         let _ = room_manager_tx.send(

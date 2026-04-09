@@ -187,7 +187,7 @@ async fn handle_incoming(
             );
         }
 
-        WSIncomingMessage::JoinRoom { room_id } => {
+        WSIncomingMessage::JoinRoom { room_id, password } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
@@ -200,6 +200,7 @@ async fn handle_incoming(
                 RoomManagerCommand::JoinRoom {
                     player: player_id,
                     room_id,
+                    password,
                 },
             );
         }
@@ -207,6 +208,40 @@ async fn handle_incoming(
         WSIncomingMessage::LeaveRoom { room_id } => {
             let _ = app_ctx.room_manager.send(
                 RoomManagerCommand::LeaveRoom {
+                    player: player_id,
+                    room_id,
+                },
+            );
+        }
+
+        WSIncomingMessage::SurrenderRoom { room_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::SurrenderRoom {
+                    player: player_id,
+                    room_id,
+                },
+            );
+        }
+
+        WSIncomingMessage::SpectateRoom { room_id } => {
+            if let Some(session) = connection_pool.get(&player_id) {
+                let status = session.status.read().await.clone();
+                if status != PlayerStatus::Connected {
+                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    return;
+                }
+            }
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::SpectateRoom {
+                    player: player_id,
+                    room_id,
+                },
+            );
+        }
+
+        WSIncomingMessage::UnspectateRoom { room_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::UnspectateRoom {
                     player: player_id,
                     room_id,
                 },
@@ -418,6 +453,15 @@ async fn handle_socket(
                 let _ = app_ctx.room_manager.send(
                     RoomManagerCommand::PlayerTemporaryDisconnect { player: player_id, room_id: room_id.to_string() }
                 );
+            }
+            PlayerStatus::Spectating { room_id } => {
+                let _ = app_ctx.room_manager.send(
+                    RoomManagerCommand::UnspectateRoom {
+                        player: player_id,
+                        room_id,
+                    },
+                );
+                connection_pool.disconnect(&player_id).await;
             }
             _ => {
                 let _ = app_ctx.queue_manager.send(

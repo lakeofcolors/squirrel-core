@@ -18,6 +18,9 @@ pub enum PlayerStatus {
         position: PlayerPosition,
         disconnected_at: Option<Instant>
     },
+    Spectating {
+        room_id: String
+    }
 }
 
 #[derive(Debug)]
@@ -58,6 +61,10 @@ impl PlayerSession{
     pub async fn mark_as_in_game(&self, room_id: String, position: PlayerPosition){
         info!("Player {} marked as InGame (room_id: {}, position: {:?})", self.player_meta.id, room_id, position);
         *self.status.write().await = PlayerStatus::InGame { room_id, position, disconnected_at: None }
+    }
+    pub async fn mark_as_spectating(&self, room_id: String) {
+        info!("Player {} marked as Spectating (room_id: {})", self.player_meta.id, room_id);
+        *self.status.write().await = PlayerStatus::Spectating { room_id }
     }
     pub async fn mark_as_disconnected(&self){
         info!("Player {} marked as Disconnected", self.player_meta.id);
@@ -149,6 +156,7 @@ impl ConnectionPool{
                     player.mark_back_to_connected().await;
                 }
                 PlayerStatus::Connected
+                | PlayerStatus::Spectating { .. }
                 | PlayerStatus::InQueue
                 | PlayerStatus::InGame {
                     disconnected_at: None,

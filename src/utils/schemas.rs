@@ -93,8 +93,11 @@ pub enum RoomManagerCommand {
         player: PlayerId,
         difficulty: BotDifficulty,
     },
-    JoinRoom { player: PlayerId, room_id: RoomId },
+    JoinRoom { player: PlayerId, room_id: RoomId, password: Option<String> },
     LeaveRoom { player: PlayerId, room_id: RoomId },
+    SurrenderRoom { player: PlayerId, room_id: RoomId },
+    SpectateRoom { player: PlayerId, room_id: RoomId },
+    UnspectateRoom { player: PlayerId, room_id: RoomId },
     LeaveAllRoom { player: PlayerId },
     FinishRoom{
         room_id: RoomId
@@ -114,6 +117,9 @@ pub enum RoomActorCommand{
     PlayerTemporaryDisconnect{ player: PlayerId },
     PlayerReconnect{ player: PlayerId },
     PlayerDisconnected { player: PlayerId },
+    PlayerSurrendered { player: PlayerId },
+    AddSpectator { player: PlayerId },
+    RemoveSpectator { player: PlayerId },
 }
 
 
@@ -319,6 +325,7 @@ pub struct GameState {
     pub is_first_round: bool,
     pub attacking_team: Team,
     pub player_trump_map: HashMap<PlayerPosition, Suit>,
+    pub club_jack_owner: PlayerPosition,
     pub suits_played: HashSet<Suit>,
     pub paused: bool,
 }
@@ -334,6 +341,7 @@ impl GameState {
 
         Self {
             trump: Suit::Clubs,
+            club_jack_owner: Self::find_club_jack_owner(hands.clone()).unwrap(),
             player_trump_map: Self::assign_player_trumps(hands.clone()),
             hands,
             current_trick: vec![],
@@ -398,6 +406,7 @@ impl GameState {
         new_hands.insert(PlayerPosition::South, hands_vec[2].clone());
         new_hands.insert(PlayerPosition::West, hands_vec[3].clone());
 
+        self.club_jack_owner = Self::find_club_jack_owner(new_hands.clone()).unwrap();
         self.hands = new_hands;
     }
 
@@ -577,6 +586,7 @@ pub struct GameSnapshot {
     pub room_id: RoomId,
     pub players: Vec<PlayerInfo>,
     pub trump: Suit,
+    pub club_jack_owner: PlayerPosition,
     pub eyes: HashMap<Team, u16>,
     pub scores: HashMap<Team, u16>,
     pub current_turn: PlayerPosition,
@@ -593,8 +603,9 @@ pub enum WSEvent {
     RoomUpdated { room: RoomMeta },
     RoomRemoved { room_id: RoomId },
 
-    PlayerDisconnected{ position: PlayerPosition },
+    PlayerDisconnected { position: PlayerPosition },
     PlayerReconnected { position: PlayerPosition },
+    SpectatorCountUpdated { count: usize },
     SuccessLogin{ username: String },
     GameSnapshot (GameSnapshot),
     GameClose{reason: String},
@@ -630,8 +641,11 @@ pub enum WSIncomingMessage {
     CancelSearch{stake: Decimal, currency: Currency, league: League},
     PlayWithBots{stake: Decimal, currency: Currency, league: League, difficulty: BotDifficulty},
     CreateRoom{stake: Decimal, currency: Currency, league: League, password_hash: Option<Hash>},
-    JoinRoom { room_id: RoomId },
+    JoinRoom { room_id: RoomId, password: Option<String> },
     LeaveRoom { room_id: RoomId },
+    SurrenderRoom { room_id: RoomId },
+    SpectateRoom { room_id: RoomId },
+    UnspectateRoom { room_id: RoomId },
     SubscribeRooms,
     UnsubscribeRooms,
     PlayCard{room_id: RoomId, rank: String, suit: String},
