@@ -586,6 +586,7 @@ pub struct GameSnapshot {
     pub room_id: RoomId,
     pub players: Vec<PlayerInfo>,
     pub trump: Suit,
+    pub player_trump_map: HashMap<PlayerPosition, Suit>,
     pub club_jack_owner: PlayerPosition,
     pub eyes: HashMap<Team, u16>,
     pub scores: HashMap<Team, u16>,

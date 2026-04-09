@@ -577,6 +577,7 @@ fn start_room_actor(
             room_id: room_id.clone(),
             players: players_info,
             trump: state.trump,
+            player_trump_map: state.player_trump_map.clone(),
             club_jack_owner: state.club_jack_owner,
             eyes: state.team_eye.clone(),
             scores: state.team_scores.clone(),
