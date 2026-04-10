@@ -418,6 +418,7 @@ async fn process_game_rewards(
     stake: i32,
     room_id: String,
     scores: Option<std::collections::HashMap<Team, u16>>,
+    replay_events: Option<Vec<crate::utils::schemas::GameReplayEvent>>,
 ) {
     if players.len() != 4 { return; }
 
@@ -443,10 +444,12 @@ async fn process_game_rewards(
         None => None,
     };
 
+    let replay_json = replay_events.map(|events| serde_json::to_value(events).unwrap_or(serde_json::Value::Null));
+
     let match_id_row = sqlx::query(
         r#"
-        INSERT INTO matches (room_id, mode, is_ranked, stake, status, end_reason, winner_team, finished_at)
-        VALUES ($1, $2, $3, $4, 'finished', $5, $6, NOW())
+        INSERT INTO matches (room_id, mode, is_ranked, stake, status, end_reason, winner_team, replay_events, finished_at)
+        VALUES ($1, $2, $3, $4, 'finished', $5, $6, $7, NOW())
         RETURNING id
         "#
     )
@@ -456,6 +459,7 @@ async fn process_game_rewards(
     .bind(stake as i64)
     .bind(end_reason)
     .bind(winner_str)
+    .bind(replay_json)
     .fetch_one(&mut *db_tx).await;
 
     let match_id: i64 = match match_id_row {
@@ -679,6 +683,12 @@ fn start_room_actor(
         }
 
         let mut turn_counter: u64 = 0;
+        let mut replay_events: Vec<crate::utils::schemas::GameReplayEvent> = Vec::new();
+
+        replay_events.push(crate::utils::schemas::GameReplayEvent::RoundStart {
+            hands: state.hands.iter().map(|(k, v)| (format!("{:?}", k), v.clone())).collect(),
+            player_trumps: state.player_trump_map.iter().map(|(k, v)| (format!("{:?}", k), v.clone())).collect(),
+        });
 
         for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
             if let Some(player) = players.get(i) {
@@ -751,6 +761,10 @@ fn start_room_actor(
                     
                     match state.play_card(*player_position, card){
                         Ok(_) => {
+                            replay_events.push(crate::utils::schemas::GameReplayEvent::PlayCard {
+                                position: *player_position,
+                                card,
+                            });
                             let mut all_targets = player_ids.clone();
                             all_targets.extend(spectators.iter());
 
@@ -769,6 +783,11 @@ fn start_room_actor(
                             }
                             // если взятка завершенна
                             if let Some(winner) = state.resolve_trick() {
+                                replay_events.push(crate::utils::schemas::GameReplayEvent::TrickWon {
+                                    position: winner,
+                                    team: winner.team(),
+                                });
+
                                 let mut all_targets = player_ids.clone();
                                 all_targets.extend(spectators.iter());
 
@@ -780,10 +799,21 @@ fn start_room_actor(
                                 if state.hands.values().all(|h| h.is_empty()) {
                                     let _ = state.update_eye_after_round();
                                     state.update_team_score_afrer_round();
+                                    
+                                    replay_events.push(crate::utils::schemas::GameReplayEvent::RoundEnd {
+                                        scores: state.team_scores.iter().map(|(k, v)| (format!("{:?}", k), *v)).collect(),
+                                        eyes: state.team_eye.iter().map(|(k, v)| (format!("{:?}", k), *v)).collect(),
+                                    });
+
                                     let eye = state.team_eye.clone();
                                     let _ = state.update_hands(); //
                                     state.update_round_trump();
                                     state.update_round_attacking_team();
+                                    
+                                    replay_events.push(crate::utils::schemas::GameReplayEvent::RoundStart {
+                                        hands: state.hands.iter().map(|(k, v)| (format!("{:?}", k), v.clone())).collect(),
+                                        player_trumps: state.player_trump_map.iter().map(|(k, v)| (format!("{:?}", k), v.clone())).collect(),
+                                    });
 
 
                                     for player in &players.clone() {
@@ -803,7 +833,7 @@ fn start_room_actor(
                                         } else {
                                             Team::Uzi
                                         };
-                                        process_game_rewards(&app_ctx.db_pool, &players, Some(winner_team), None, stake, room_id.clone(), Some(state.team_eye.clone())).await;
+                                        process_game_rewards(&app_ctx.db_pool, &players, Some(winner_team), None, stake, room_id.clone(), Some(state.team_eye.clone()), Some(replay_events.clone())).await;
 
                                         let mut all_targets = player_ids.clone();
                                         all_targets.extend(spectators.iter());
@@ -842,7 +872,7 @@ fn start_room_actor(
                 RoomActorCommand::TurnTimeout { player, turn } => {
                     if turn == turn_counter {
                         warn!("Player {} failed to make a move within 60s", player);
-                        process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone())).await;
+                        process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone()), Some(replay_events.clone())).await;
                         
                         let mut all_targets = player_ids.clone();
                         all_targets.extend(spectators.iter());
@@ -856,7 +886,7 @@ fn start_room_actor(
                     }
                 }
                 RoomActorCommand::PlayerDisconnected { player } => {
-                    process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone())).await;
+                    process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone()), Some(replay_events.clone())).await;
                     
                     app_ctx.connection_pool().disconnect(&player).await;
 
@@ -959,6 +989,8 @@ fn start_room_actor(
                     }
                 }
                 RoomActorCommand::PlayerSurrendered { player } => {
+                    process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone()), Some(replay_events.clone())).await;
+
                     let mut all_targets = player_ids.clone();
                     all_targets.extend(spectators.iter());
 
@@ -969,13 +1001,7 @@ fn start_room_actor(
                         },
                     ).await;
 
-                    // Automatically trigger the same processing as an abandoned match
-                    let _ = room_manager_tx.send(
-                        RoomManagerCommand::PlayerDisconnected {
-                            player: player,
-                            room_id: room_id.clone(),
-                        }
-                    );
+                    let _ = room_manager_tx.send(RoomManagerCommand::FinishRoom { room_id: room_id.clone() });
                     break;
                 }
                 RoomActorCommand::AddSpectator { player } => {

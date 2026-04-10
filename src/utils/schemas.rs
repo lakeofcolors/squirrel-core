@@ -624,6 +624,27 @@ pub enum WSEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum GameReplayEvent {
+    RoundStart {
+        hands: HashMap<String, Vec<Card>>,
+        player_trumps: HashMap<String, Suit>
+    },
+    PlayCard {
+        position: PlayerPosition,
+        card: Card,
+    },
+    TrickWon {
+        position: PlayerPosition,
+        team: Team,
+    },
+    RoundEnd {
+        scores: HashMap<String, u16>,
+        eyes: HashMap<String, u16>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WSCardPlayed {
     pub position: PlayerPosition,
     pub card: Card,

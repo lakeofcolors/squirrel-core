@@ -13,6 +13,7 @@ use crate::handlers::ws::ws_handler;
 use crate::handlers::store::{telegram_update_webhook, create_invoice, buy_item_for_nuts, start_rewarded_session};
 use crate::handlers::rating::get_leaderboard;
 use crate::handlers::profile::get_profile;
+use crate::handlers::history::get_match_replay;
 use crate::handlers::friends::{get_friends, consume_invite, send_request, get_requests, accept_request, decline_request};
 use crate::utils::db::pg_pool;
 pub mod handlers;
@@ -70,6 +71,7 @@ async fn main() {
         .route("/v1/friends/requests", post(send_request).get(get_requests))
         .route("/v1/friends/requests/:id/accept", post(accept_request))
         .route("/v1/friends/requests/:id/decline", post(decline_request))
+        .route("/v1/history/:match_id/replay", get(get_match_replay))
         .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))

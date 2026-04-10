@@ -106,7 +106,7 @@ pub async fn get_profile(
     let history_rows = sqlx::query(
         r#"
         SELECT 
-            id, result, mode, score, rating_delta, to_char(created_at, 'DD.MM.YYYY') as created_at_str
+            match_id as id, result, mode, score, rating_delta, to_char(created_at, 'DD.MM.YYYY') as created_at_str
         FROM match_history
         WHERE telegram_id = $1
         ORDER BY created_at DESC
