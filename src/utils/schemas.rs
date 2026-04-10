@@ -109,6 +109,7 @@ pub enum RoomManagerCommand {
     PlayerTemporaryDisconnect{ player: PlayerId, room_id: RoomId },
     PlayerReconnect{ player: PlayerId, room_id: RoomId },
     PlayerDisconnected { player: PlayerId, room_id: RoomId },
+    PlayerReady { player: PlayerId, room_id: RoomId },
 }
 
 #[derive(Debug)]
@@ -120,6 +121,9 @@ pub enum RoomActorCommand{
     PlayerSurrendered { player: PlayerId },
     AddSpectator { player: PlayerId },
     RemoveSpectator { player: PlayerId },
+    PlayerReady { player: PlayerId },
+    ReadyTimeout,
+    TurnTimeout { player: PlayerId, turn: u64 },
 }
 
 
@@ -615,6 +619,8 @@ pub enum WSEvent {
     TrickWon{position: PlayerPosition, team: Team},
     GameOver{scores: HashMap<Team, u16>}, // team_id -> score
     Error{detail: String},
+    ReadyCheckStarted { expires_at: u64, room_id: RoomId, players: Vec<PlayerMeta> },
+    ReadyCheckUpdate { ready_players: Vec<PlayerId> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -647,6 +653,7 @@ pub enum WSIncomingMessage {
     SurrenderRoom { room_id: RoomId },
     SpectateRoom { room_id: RoomId },
     UnspectateRoom { room_id: RoomId },
+    Ready { room_id: RoomId },
     SubscribeRooms,
     UnsubscribeRooms,
     PlayCard{room_id: RoomId, rank: String, suit: String},

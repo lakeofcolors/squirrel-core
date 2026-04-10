@@ -337,6 +337,22 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     let _ = actor.send(RoomActorCommand::PlayCard { player, card });
                 }
 
+                RoomManagerCommand::PlayerReady { player, room_id } => {
+                    let Some(room) = rooms.get(&room_id) else {
+                        app_ctx.connection_pool().send_to(
+                            &player,
+                            WSEvent::Error {
+                                detail: "Комната не найдена".to_string(),
+                            },
+                        ).await;
+                        continue;
+                    };
+
+                    if let Some(actor) = room.actor.clone() {
+                        let _ = actor.send(RoomActorCommand::PlayerReady { player });
+                    }
+                }
+
                 RoomManagerCommand::PlayerDisconnected { player, room_id } => {
                     if let Some(room) = rooms.get(&room_id) {
                         if let Some(actor) = &room.actor {
@@ -599,6 +615,70 @@ fn start_room_actor(
         let mut disconnected: HashMap<PlayerId, Instant> = HashMap::new();
         let mut spectators: std::collections::HashSet<PlayerId> = std::collections::HashSet::new();
 
+        let is_bot_match = players.iter().any(|p| p.is_bot);
+        if !is_bot_match {
+            let mut ready_players = std::collections::HashSet::new();
+            
+            // Broadcast ReadyCheckStarted
+            let expires_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + 20;
+            app_ctx.connection_pool().broadcast(
+                player_ids.clone(),
+                WSEvent::ReadyCheckStarted { expires_at, room_id: room_id.clone(), players: players.clone() }
+            ).await;
+            
+            let tx_ready = tx_actor.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                let _ = tx_ready.send(RoomActorCommand::ReadyTimeout);
+            });
+            
+            let mut ready_aborted = false;
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    RoomActorCommand::PlayerReady { player } => {
+                        ready_players.insert(player);
+                        app_ctx.connection_pool().broadcast(
+                            player_ids.clone(),
+                            WSEvent::ReadyCheckUpdate { ready_players: ready_players.iter().cloned().collect() }
+                        ).await;
+                        if ready_players.len() == 4 {
+                            break;
+                        }
+                    }
+                    RoomActorCommand::ReadyTimeout => {
+                        app_ctx.connection_pool().broadcast(
+                            player_ids.clone(),
+                            WSEvent::Error { detail: "Не все игроки подтвердили готовность. Комната распущена.".to_string() }
+                        ).await;
+                        app_ctx.connection_pool().broadcast(
+                            player_ids.clone(),
+                            WSEvent::GameClose { reason: "Отмена игры".to_string() }
+                        ).await;
+                        ready_aborted = true;
+                        break;
+                    }
+                    RoomActorCommand::PlayerDisconnected { player } => {
+                        app_ctx.connection_pool().broadcast(
+                            player_ids.clone(),
+                            WSEvent::Error { detail: "Игрок покинул комнату во время проверки. Комната распущена.".to_string() }
+                        ).await;
+                        app_ctx.connection_pool().broadcast(
+                            player_ids.clone(),
+                            WSEvent::GameClose { reason: "Отмена игры".to_string() }
+                        ).await;
+                        ready_aborted = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            if ready_aborted {
+                let _ = room_manager_tx.send(RoomManagerCommand::FinishRoom { room_id: room_id.clone() });
+                return;
+            }
+        }
+
+        let mut turn_counter: u64 = 0;
 
         for (i, pos) in [PlayerPosition::North, PlayerPosition::East, PlayerPosition::South, PlayerPosition::West].iter().enumerate() {
             if let Some(player) = players.get(i) {
@@ -646,6 +726,18 @@ fn start_room_actor(
             }
         };
 
+        let spawn_turn_timeout = |turn: u64, current_player_pos: PlayerPosition, player_positions: &BiMap<PlayerId, PlayerPosition>, tx: mpsc::UnboundedSender<RoomActorCommand>| {
+            if let Some(player_id) = player_positions.get_by_right(&current_player_pos) {
+                let pid = *player_id;
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    let _ = tx.send(RoomActorCommand::TurnTimeout { player: pid, turn });
+                });
+            }
+        };
+
+        turn_counter += 1;
+        spawn_turn_timeout(turn_counter, state.current_turn, &player_positions, tx_actor.clone());
         trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
 
         while let Some(cmd) = rx.recv().await {
@@ -735,7 +827,8 @@ fn start_room_actor(
                                 all_targets.clone(),
                                 WSEvent::GameSnapshot(snapshot)
                             ).await;
-                            
+                            turn_counter += 1;
+                            spawn_turn_timeout(turn_counter, state.current_turn, &player_positions, tx_actor.clone());
                             trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
                         }
                         Err(e) => {
@@ -744,6 +837,22 @@ fn start_room_actor(
                                 WSEvent::Error { detail: e.to_string() }
                             ).await
                         }
+                    }
+                }
+                RoomActorCommand::TurnTimeout { player, turn } => {
+                    if turn == turn_counter {
+                        warn!("Player {} failed to make a move within 60s", player);
+                        process_game_rewards(&app_ctx.db_pool, &players, None, Some(player), stake, room_id.clone(), Some(state.team_eye.clone())).await;
+                        
+                        let mut all_targets = player_ids.clone();
+                        all_targets.extend(spectators.iter());
+                        app_ctx.connection_pool().broadcast(
+                            all_targets.clone(),
+                            WSEvent::GameClose { reason: "Вы вышли за лимит времени на ход".to_string() }
+                        ).await;
+                        
+                        let _ = room_manager_tx.send(RoomManagerCommand::FinishRoom { room_id: room_id.clone() });
+                        break;
                     }
                 }
                 RoomActorCommand::PlayerDisconnected { player } => {
@@ -897,6 +1006,7 @@ fn start_room_actor(
                         WSEvent::SpectatorCountUpdated { count: spectators.len() }
                     ).await;
                 }
+                RoomActorCommand::PlayerReady { .. } | RoomActorCommand::ReadyTimeout => {}
             };
         }
 

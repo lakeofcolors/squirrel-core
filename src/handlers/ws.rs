@@ -248,6 +248,15 @@ async fn handle_incoming(
             );
         }
 
+        WSIncomingMessage::Ready { room_id } => {
+            let msg = RoomManagerCommand::PlayerReady {
+                player: player_id,
+                room_id,
+            };
+            if let Err(e) = app_ctx.room_manager.send(msg) {
+                error!("Failed to send PlayerReady to RoomManager: {:?}", e);
+            }
+        }
         WSIncomingMessage::SubscribeRooms => {
             let _ = app_ctx.room_manager.send(
                 RoomManagerCommand::SubscribeRooms {
