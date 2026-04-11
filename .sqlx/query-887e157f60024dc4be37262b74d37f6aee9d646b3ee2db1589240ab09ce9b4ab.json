@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_event_purchases (telegram_id, shop_item_id, purchase_count)\n         VALUES ($1, $2, 1)\n         ON CONFLICT (telegram_id, shop_item_id)\n         DO UPDATE SET purchase_count = user_event_purchases.purchase_count + 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "887e157f60024dc4be37262b74d37f6aee9d646b3ee2db1589240ab09ce9b4ab"
+}

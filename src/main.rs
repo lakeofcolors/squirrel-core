@@ -14,7 +14,7 @@ use crate::handlers::store::{telegram_update_webhook, create_invoice, buy_item_f
 use crate::handlers::rating::get_leaderboard;
 use crate::handlers::profile::get_profile;
 use crate::handlers::history::get_match_replay;
-use crate::handlers::friends::{get_friends, consume_invite, send_request, get_requests, accept_request, decline_request};
+use crate::handlers::friends::{get_friends, consume_invite, send_request, get_requests, accept_request, decline_request, search_users};
 use crate::handlers::chests::{get_chests, open_chest, buy_chest};
 use crate::handlers::daily::{get_daily_status, claim_daily_reward};
 use crate::utils::db::pg_pool;
@@ -69,6 +69,7 @@ async fn main() {
         .route("/v1/rating", get(get_leaderboard))
         .route("/v1/profile", get(get_profile))
         .route("/v1/friends", get(get_friends))
+        .route("/v1/users/search", get(search_users))
         .route("/v1/friends/invite/consume", post(consume_invite))
         .route("/v1/friends/requests", post(send_request).get(get_requests))
         .route("/v1/friends/requests/:id/accept", post(accept_request))
@@ -76,6 +77,7 @@ async fn main() {
         .route("/v1/history/:match_id/replay", get(get_match_replay))
         .route("/v1/events", get(crate::handlers::events::get_active_event))
         .route("/v1/events/claim", post(crate::handlers::events::claim_quest))
+        .route("/v1/events/buy", post(crate::handlers::events::buy_event_item))
         .route("/v1/inventory/use", post(crate::handlers::inventory::use_item))
         .route("/v1/chests", get(get_chests))
         .route("/v1/chests/open", post(open_chest))

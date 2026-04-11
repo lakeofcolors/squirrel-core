@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT esi.id, esi.item_type, esi.item_id, esi.cost, esi.title, esi.icon, esi.max_purchases, \n                        COALESCE(uep.purchase_count, 0) as purchase_count\n                 FROM event_shop_items esi\n                 LEFT JOIN user_event_purchases uep ON esi.id = uep.shop_item_id AND uep.telegram_id = $1\n                 WHERE esi.event_id = $2\n                 ORDER BY esi.sort_order ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "item_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "item_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "cost",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "max_purchases",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "purchase_count",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "a7986374a73222728cc2e7af14a0e7281fd6ec935ddea6293ebf4d09b9da48eb"
+}

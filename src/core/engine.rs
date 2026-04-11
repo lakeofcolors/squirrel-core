@@ -503,11 +503,10 @@ async fn process_game_rewards(
         let compensation_nuts = stake / 3;
 
         for (i, player) in players.iter().enumerate() {
-            if player.is_bot {
-                continue;
-            }
-
             let is_leaver = player.id == leaver_id;
+            let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
+            let result_str = if is_leaver { "abandoned" } else { "win" };
+
             let rating_delta = if is_bot_match { 0 } else if is_leaver { penalty_rating } else { compensation_rating };
             let nuts_delta = if is_bot_match { 0 } else if is_leaver { penalty_nuts } else { compensation_nuts };
             
@@ -543,16 +542,16 @@ async fn process_game_rewards(
             if player.is_bot {
                 continue;
             }
-
+            
             let is_winner = (winner == Team::Kaskyr && team_kaskyr.contains(&player.id)) 
                          || (winner == Team::Uzi && team_uzi.contains(&player.id));
             
             let rating_delta = if is_bot_match { 0 } else if is_winner { win_rating } else { lose_rating };
             let nuts_delta = if is_bot_match { 0 } else if is_winner { win_nuts } else { lose_nuts };
-            let result_str = if is_winner { "win" } else { "lose" };
-
+            
             update_player_rewards(&mut db_tx, player.id, rating_delta, nuts_delta, is_winner, false, is_bot_match).await;
 
+            let result_str = if is_winner { "win" } else { "lose" };
             let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
 
             let _ = sqlx::query!(

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            u.telegram_id, \n            u.username, \n            u.photo_url, \n            u.rating,\n            EXISTS(SELECT 1 FROM user_friends WHERE user_telegram_id = $1 AND friend_telegram_id = u.telegram_id) as is_friend,\n            EXISTS(SELECT 1 FROM friend_requests WHERE from_telegram_id = $1 AND to_telegram_id = u.telegram_id AND status = 'pending') as request_sent\n        FROM users u\n        WHERE LOWER(u.username) LIKE $2 AND u.telegram_id != $1\n        ORDER BY u.rating DESC\n        LIMIT 20\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "telegram_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "photo_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "rating",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_friend",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "request_sent",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "4401d4ef67df6f4a481be48a4c66a7e6c11cdb1914cfdf1a3bc198d4bb2d4880"
+}

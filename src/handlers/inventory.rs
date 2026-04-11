@@ -31,21 +31,21 @@ pub async fn use_item(
 
     // Check if user has booster
     let inv = sqlx::query!(
-        "SELECT id FROM user_inventory WHERE telegram_id = $1 AND item_type = 'booster' AND item_id = $2 FOR UPDATE",
+        "SELECT amount FROM user_boosters WHERE telegram_id = $1 AND booster_id = $2 FOR UPDATE",
         user_id, item_key
     ).fetch_optional(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
-    if inv.is_none() {
+    let amount = inv.map(|r| r.amount).unwrap_or(0);
+    if amount <= 0 {
         return Err((StatusCode::BAD_REQUEST, "Вы не владеете этим предметом".into()));
     }
 
-    let item_id = inv.unwrap().id;
-
     // Apply booster
     if item_key == "xp_1h" || item_key == "nuts_1h" {
-        // Delete item 1 count
+        // Decrease booster amount
         let _ = sqlx::query!(
-            "DELETE FROM user_inventory WHERE id = $1", item_id
+            "UPDATE user_boosters SET amount = amount - 1 WHERE telegram_id = $1 AND booster_id = $2", 
+            user_id, item_key
         ).execute(&mut *tx).await;
 
         if item_key == "xp_1h" {

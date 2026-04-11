@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_boosters SET amount = amount - 1 WHERE telegram_id = $1 AND booster_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c2e5edf837378dd46b9c94924764245a28e2bf20fc9b8c71c72f21c16f3620f4"
+}

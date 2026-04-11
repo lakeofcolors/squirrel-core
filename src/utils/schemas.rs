@@ -436,12 +436,16 @@ impl GameState {
         }
 
         if a == 120 {
-            *self.team_eye.entry(Team::Kaskyr).or_insert(0) += 12;
+            let entry = self.team_eye.entry(Team::Kaskyr).or_insert(0);
+            *entry += 12;
+            if *entry > 12 { *entry = 12; }
             return Some(Team::Kaskyr);
         }
 
         if b == 120 {
-            *self.team_eye.entry(Team::Uzi).or_insert(0) += 12;
+            let entry = self.team_eye.entry(Team::Uzi).or_insert(0);
+            *entry += 12;
+            if *entry > 12 { *entry = 12; }
             return Some(Team::Uzi);
         }
 
@@ -465,7 +469,10 @@ impl GameState {
             }
         }
 
-        *self.team_eye.entry(winner).or_insert(0) += eyes;
+        let entry = self.team_eye.entry(winner).or_insert(0);
+        *entry += eyes;
+        if *entry > 12 { *entry = 12; }
+        
         self.is_first_round = false;
 
         Some(winner)

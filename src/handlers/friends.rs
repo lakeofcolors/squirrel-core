@@ -307,3 +307,66 @@ pub async fn decline_request(
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))
 }
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub q: String,
+}
+
+#[derive(Serialize)]
+pub struct UserSearchDto {
+    pub id: i64,
+    pub username: String,
+    pub photo_url: Option<String>,
+    pub rating: i32,
+    pub is_friend: bool,
+    pub request_sent: bool,
+}
+
+pub async fn search_users(
+    auth_user: AuthUser,
+    axum::extract::Query(query): axum::extract::Query<SearchQuery>,
+    Extension(app_ctx): Extension<Arc<AppContext>>,
+) -> Result<Json<Vec<UserSearchDto>>, (StatusCode, String)> {
+    if query.q.trim().len() < 2 {
+        return Ok(Json(vec![]));
+    }
+    
+    let search_term = format!("%{}%", query.q.trim().to_lowercase());
+    let pool = &app_ctx.db_pool;
+    let my_id = auth_user.telegram_id;
+
+    let rows = sqlx::query!(
+        r#"
+        SELECT 
+            u.telegram_id, 
+            u.username, 
+            u.photo_url, 
+            u.rating,
+            EXISTS(SELECT 1 FROM user_friends WHERE user_telegram_id = $1 AND friend_telegram_id = u.telegram_id) as is_friend,
+            EXISTS(SELECT 1 FROM friend_requests WHERE from_telegram_id = $1 AND to_telegram_id = u.telegram_id AND status = 'pending') as request_sent
+        FROM users u
+        WHERE LOWER(u.username) LIKE $2 AND u.telegram_id != $1
+        ORDER BY u.rating DESC
+        LIMIT 20
+        "#,
+        my_id, search_term
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+
+    let mut results = vec![];
+    for row in rows {
+        results.push(UserSearchDto {
+            id: row.telegram_id,
+            username: row.username.unwrap_or_else(|| "anon".into()),
+            photo_url: row.photo_url,
+            rating: row.rating,
+            is_friend: row.is_friend.unwrap_or(false),
+            request_sent: row.request_sent.unwrap_or(false),
+        });
+    }
+
+    Ok(Json(results))
+}

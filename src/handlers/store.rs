@@ -33,13 +33,14 @@ pub struct StoreNutsPackDto {
 #[derive(Debug, Serialize)]
 pub struct StoreCosmeticDto {
     pub id: String,           // deck_pink
-    pub item_type: String,    // deck | background
-    pub item_key: String,     // pink / fire
+    pub item_type: String,
+    pub item_key: String,
     pub title: String,
     pub price_nuts: i64,
     pub rarity: String,
     pub owned: bool,
     pub equipped: bool,
+    pub amount: Option<i32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -328,15 +329,36 @@ pub async fn get_store(
     let mut boosters = Vec::new();
 
     for row in cosmetics {
+        
+        let i_type: String = row.try_get("item_type").unwrap();
+        let i_key: String = row.try_get("item_key").unwrap();
+        
+        let (owned, amount) = if i_type == "booster" {
+            // We use block_on or spawn? Wait! We can't await inside synchronous loop if it's PGRow! 
+            // Wait, the outer loop is `for row in cosmetics {`
+            // `cosmetics` is `Vec<PgRow>`, so we CAN await if we change the loop to `for row in cosmetics` in an async context. But it's already an async block! No, `fetch_all` returns a Vec, so we can iterate.
+            
+            // To fetch amount, we need another query! 
+            // But doing queries in a loop is an N+1 problem.
+            // Better to just keep the original structure, and we inject amount inside the loop! 
+            // `pool` is borrowed.
+            let a = sqlx::query!("SELECT amount FROM user_boosters WHERE telegram_id = $1 AND booster_id = $2", telegram_id, i_key).fetch_optional(&app_ctx.db_pool).await.unwrap_or(None);
+            let b_amount = a.map(|r| r.amount).unwrap_or(0);
+            (b_amount > 0, Some(b_amount))
+        } else {
+            (row.try_get("owned").unwrap_or(false), None)
+        };
+
         let dto = StoreCosmeticDto {
             id: row.try_get("id").unwrap(),
-            item_type: row.try_get("item_type").unwrap(),
-            item_key: row.try_get("item_key").unwrap(),
+            item_type: i_type.clone(),
+            item_key: i_key,
             title: row.try_get("title").unwrap(),
             price_nuts: row.try_get("price_nuts").unwrap(),
             rarity: row.try_get("rarity").unwrap(),
-            owned: row.try_get("owned").unwrap_or(false),
+            owned,
             equipped: row.try_get("equipped").unwrap_or(false),
+            amount,
         };
 
         if dto.item_type == "deck" {
@@ -703,29 +725,47 @@ pub async fn buy_item_for_nuts(
         )
     })?;
 
-    sqlx::query(
-        r#"
-        INSERT INTO user_inventory (
-            telegram_id,
-            item_type,
-            item_id,
-            created_at
+    if req.item_type == "booster" {
+        sqlx::query(
+            r#"
+            INSERT INTO user_boosters (telegram_id, booster_id, amount)
+            VALUES ($1, $2, 1)
+            ON CONFLICT (telegram_id, booster_id) DO UPDATE SET amount = user_boosters.amount + 1
+            "#,
         )
-        VALUES ($1, $2, $3, NOW())
-        "#,
-    )
-    .bind(telegram_id)
-    .bind(&req.item_type)
-    .bind(&req.item_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| {
-        error!("Failed to insert inventory item: {:?}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to save inventory item".to_string(),
+        .bind(telegram_id)
+        .bind(&req.item_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            error!("Failed to insert booster: {:?}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save booster".to_string())
+        })?;
+    } else {
+        sqlx::query(
+            r#"
+            INSERT INTO user_inventory (
+                telegram_id,
+                item_type,
+                item_id,
+                created_at
+            )
+            VALUES ($1, $2, $3, NOW())
+            "#,
         )
-    })?;
+        .bind(telegram_id)
+        .bind(&req.item_type)
+        .bind(&req.item_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            error!("Failed to insert inventory item: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to save inventory item".to_string(),
+            )
+        })?;
+    }
 
     sqlx::query(
         r#"
