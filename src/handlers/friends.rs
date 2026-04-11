@@ -12,6 +12,8 @@ pub struct FriendDto {
     pub online: bool,
     pub status: String,
     pub avatar: String,
+    pub room_id: Option<String>,
+    pub rating: i32,
 }
 
 pub async fn get_friends(
@@ -61,6 +63,7 @@ pub async fn get_friends(
 
         let mut online = false;
         let mut status_str = "Офлайн".to_string();
+        let mut current_room_id: Option<String> = None;
 
         if let Some(session) = app_ctx.connection_pool().get(&friend_id) {
             let status = session.status.read().await;
@@ -73,17 +76,19 @@ pub async fn get_friends(
                     online = true;
                     status_str = "В поиске игры".to_string();
                 }
-                PlayerStatus::InGame { .. } => {
+                PlayerStatus::InGame { ref room_id, .. } => {
                     online = true;
                     status_str = "Играет матч".to_string();
+                    current_room_id = Some(room_id.clone());
                 }
                 PlayerStatus::Disconnected => {
                     online = false;
                     status_str = "Недавно был(а)".to_string();
                 }
-                PlayerStatus::Spectating { .. } => {
+                PlayerStatus::Spectating { ref room_id, .. } => {
                     online = true;
                     status_str = "Наблюдает".to_string();
+                    current_room_id = Some(room_id.clone());
                 }
             }
         }
@@ -95,6 +100,8 @@ pub async fn get_friends(
             online, 
             status: status_str,
             avatar,
+            room_id: current_room_id,
+            rating,
         });
     }
 

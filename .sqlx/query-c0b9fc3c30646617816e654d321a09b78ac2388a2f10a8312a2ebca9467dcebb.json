@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET free_coins = COALESCE(free_coins, 0) + 1 WHERE telegram_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0b9fc3c30646617816e654d321a09b78ac2388a2f10a8312a2ebca9467dcebb"
+}
