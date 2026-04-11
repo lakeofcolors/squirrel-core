@@ -13,6 +13,9 @@ pub enum PlayerStatus {
     Connected,
     Disconnected,
     InQueue,
+    InLobby {
+        room_id: String
+    },
     InGame {
         room_id: String,
         position: PlayerPosition,
@@ -58,6 +61,10 @@ impl PlayerSession{
             Err(())
         }
     }
+    pub async fn mark_as_in_lobby(&self, room_id: String) {
+        *self.status.write().await = PlayerStatus::InLobby { room_id };
+    }
+
     pub async fn mark_as_in_game(&self, room_id: String, position: PlayerPosition){
         info!("Player {} marked as InGame (room_id: {}, position: {:?})", self.player_meta.id, room_id, position);
         *self.status.write().await = PlayerStatus::InGame { room_id, position, disconnected_at: None }
@@ -158,6 +165,7 @@ impl ConnectionPool{
                 PlayerStatus::Connected
                 | PlayerStatus::Spectating { .. }
                 | PlayerStatus::InQueue
+                | PlayerStatus::InLobby { .. }
                 | PlayerStatus::InGame {
                     disconnected_at: None,
                     ..

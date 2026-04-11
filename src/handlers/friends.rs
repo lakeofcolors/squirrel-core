@@ -45,9 +45,11 @@ pub async fn get_friends(
     for row in friends_rows {
         let name: Option<String> = row.try_get("username").unwrap_or(None);
         let photo_url: Option<String> = row.try_get("photo_url").unwrap_or(None);
-        let name_str = name.unwrap_or_else(|| "anon".to_string());
-        let avatar = photo_url.unwrap_or_else(|| format!("https://api.dicebear.com/7.x/thumbs/svg?seed={}", name_str));
+        let name_str = name.clone().unwrap_or_else(|| "anon".to_string());
+        let avatar = photo_url.clone().unwrap_or_else(|| format!("https://api.dicebear.com/7.x/thumbs/svg?seed={}", name_str));
         let rating: i32 = row.try_get("rating").unwrap_or(0);
+        let telegram_id: i64 = row.try_get("telegram_id").unwrap_or(0);
+        let is_online = app_ctx.connection_pool().get(&telegram_id).is_some();
 
         let league = if rating < 500 {
             "Bronze"
@@ -70,11 +72,16 @@ pub async fn get_friends(
             match *status {
                 PlayerStatus::Connected => {
                     online = true;
-                    status_str = "В лобби".to_string();
+                    status_str = "В сети".to_string();
                 }
                 PlayerStatus::InQueue => {
                     online = true;
                     status_str = "В поиске игры".to_string();
+                }
+                PlayerStatus::InLobby { ref room_id } => {
+                    online = true;
+                    status_str = "В лобби".to_string();
+                    current_room_id = Some(room_id.clone());
                 }
                 PlayerStatus::InGame { ref room_id, .. } => {
                     online = true;
@@ -93,6 +100,7 @@ pub async fn get_friends(
             }
         }
 
+        tracing::info!("Friend query: id={} online={} status_str={}", friend_id, online, status_str);
         friends.push(FriendDto {
             id: friend_id,
             name: name_str,

@@ -23,6 +23,7 @@ fn try_match(
 
             if let Err(e) = room_tx.send(RoomManagerCommand::CreateRoom {
                 key: key.clone(),
+                name: None,
                 players,
                 password_hash: None,
                 kind: RoomKind::Queue
@@ -47,8 +48,9 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         while let Some(cmd) = rx.recv().await {
             debug!("Processing RoomManagerCommand: {:?}", cmd);
             match cmd {
-                RoomManagerCommand::CreateRoom { key, players, password_hash, kind } => {
+                RoomManagerCommand::CreateRoom { key, name, players, password_hash, kind } => {
                     let room_id = Uuid::new_v4().to_string();
+                    let room_name = name.unwrap_or_else(|| Uuid::new_v4().to_string()[..8].to_string());
                     let players_meta: Vec<PlayerMeta> = players
                         .iter()
                         .filter_map(|id| app_ctx.connection_pool().get(id))
@@ -71,7 +73,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     let stake_value = key.stake.to_i32().unwrap_or(0);
                     let room_meta = RoomMeta{
                         id: room_id.clone(),
-                        name: room_id.clone(),
+                        name: room_name,
                         key,
                         players: players_meta.clone(),
                         kind
@@ -82,9 +84,19 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                  actor: None,
                                  meta: room_meta.clone(),
                                  password_hash,
-                                 created_at: Instant::now()
+                                 created_at: Instant::now(),
+                                 invited_players: Vec::new()
                              }
                        );
+                    // Mark creator as in lobby if private room
+                    if matches!(room_meta.kind, RoomKind::Private | RoomKind::Open) {
+                        for player_meta in &players_meta {
+                            if let Some(session) = app_ctx.connection_pool().get(&player_meta.id) {
+                                let _ = session.mark_as_in_lobby(room_id.clone()).await;
+                            }
+                        }
+                    }
+
                     app_ctx.connection_pool().broadcast(
                         room_subscribers.clone(),
                         WSEvent::RoomCreated { room: room_meta }
@@ -134,7 +146,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                              actor: None,
                              meta: room_meta.clone(),
                              password_hash: None,
-                             created_at: Instant::now()
+                             created_at: Instant::now(),
+                             invited_players: Vec::new()
                          });
 
                     app_ctx.connection_pool().broadcast(
@@ -183,6 +196,23 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         ).await;
                     }
                 }
+                RoomManagerCommand::InvitePlayer { room_id, inviter_id, target_id } => {
+                    if let Some(room) = rooms.get_mut(&room_id) {
+                        if room.meta.players.iter().any(|p| p.id == inviter_id) {
+                            if !room.invited_players.contains(&target_id) {
+                                room.invited_players.push(target_id);
+                            }
+                            if let Some(session) = app_ctx.connection_pool().get(&inviter_id) {
+                                let pm = session.player_meta.clone();
+                                app_ctx.connection_pool().send_to(&target_id, WSEvent::GameInvite {
+                                    room_id: room_id.clone(),
+                                    room_name: Some(room.meta.name.clone()),
+                                    from: pm
+                                }).await;
+                            }
+                        }
+                    }
+                }
                 RoomManagerCommand::JoinRoom { player, room_id, password } => {
                     if let Some(room) = rooms.get_mut(&room_id) {
                         if room.meta.players.len() < 4 {
@@ -190,7 +220,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                 continue;
                             } else {
                                 if let Some(room_pwd) = &room.password_hash {
-                                    if password != Some(room_pwd.clone()) {
+                                    if !room.invited_players.contains(&player) && password != Some(room_pwd.clone()) {
                                         app_ctx.connection_pool().send_to(
                                             &player,
                                             WSEvent::Error {
@@ -224,6 +254,9 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
 
                                 if let Some(session) = app_ctx.connection_pool().get(&player) {
                                     room.meta.players.push(session.player_meta.clone());
+                                    if matches!(room.meta.kind, RoomKind::Private | RoomKind::Open) {
+                                        let _ = session.mark_as_in_lobby(room_id.clone()).await;
+                                    }
                                 } else {
                                     warn!("JoinRoom failed: player {} not in pool", player);
                                     continue;
@@ -250,6 +283,10 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     }
                 }
                 RoomManagerCommand::LeaveRoom { player, room_id } => {
+                    if let Some(session) = app_ctx.connection_pool().get(&player) {
+                        let _ = session.mark_back_to_connected().await;
+                    }
+
                     if let Some(room) = rooms.get_mut(&room_id) {
                         room.meta.players.retain(|p| p.id != player);
 
@@ -1241,7 +1278,7 @@ mod tests {
         assert_eq!(queues.get(&key).unwrap().len(), 0);
         let cmd = room_rx.try_recv().unwrap();
         
-        if let RoomManagerCommand::CreateRoom { players, kind, .. } = cmd {
+        if let RoomManagerCommand::CreateRoom { players, kind, name: _, .. } = cmd {
             assert_eq!(players, vec![1, 2, 3, 4]);
             if let RoomKind::Queue = kind {
                 // Ok

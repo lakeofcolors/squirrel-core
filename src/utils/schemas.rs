@@ -87,6 +87,7 @@ pub enum QueueCommand {
 pub enum RoomManagerCommand {
     CreateRoom {
         key: QueueKey,
+        name: Option<String>,
         players: Vec<PlayerId>,
         password_hash: Option<Hash>,
         kind: RoomKind
@@ -98,6 +99,7 @@ pub enum RoomManagerCommand {
     },
     JoinRoom { player: PlayerId, room_id: RoomId, password: Option<String> },
     LeaveRoom { player: PlayerId, room_id: RoomId },
+    InvitePlayer { room_id: RoomId, inviter_id: PlayerId, target_id: PlayerId },
     SurrenderRoom { player: PlayerId, room_id: RoomId },
     SpectateRoom { player: PlayerId, room_id: RoomId },
     UnspectateRoom { player: PlayerId, room_id: RoomId },
@@ -139,7 +141,8 @@ pub struct Room {
     pub meta: RoomMeta,
     pub password_hash: Option<Hash>,
     pub created_at: Instant,
-    pub actor: Option<mpsc::UnboundedSender<RoomActorCommand>>
+    pub actor: Option<mpsc::UnboundedSender<RoomActorCommand>>,
+    pub invited_players: Vec<i64>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -627,6 +630,7 @@ pub enum WSEvent {
     SpectatorCountUpdated { count: usize },
     SuccessLogin{ username: String },
     GameSnapshot (GameSnapshot),
+    GameInvite { room_id: RoomId, room_name: Option<String>, from: PlayerMeta },
     GameClose{reason: String},
     YourHand{cards: Vec<Card>},
     CardPlayed{position: PlayerPosition, card: Card},
@@ -684,7 +688,8 @@ pub enum WSIncomingMessage {
     FindGame{stake: Decimal, currency: Currency, league: League},
     CancelSearch{stake: Decimal, currency: Currency, league: League},
     PlayWithBots{stake: Decimal, currency: Currency, league: League, difficulty: BotDifficulty},
-    CreateRoom{stake: Decimal, currency: Currency, league: League, password_hash: Option<Hash>},
+    CreateRoom{stake: Decimal, currency: Currency, league: League, name: Option<String>, password_hash: Option<Hash>},
+    InviteFriend{room_id: RoomId, friend_id: i64},
     JoinRoom { room_id: RoomId, password: Option<String> },
     LeaveRoom { room_id: RoomId },
     SurrenderRoom { room_id: RoomId },

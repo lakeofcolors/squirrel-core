@@ -116,6 +116,14 @@ async fn handle_incoming(
             }
         }
 
+        WSIncomingMessage::InviteFriend { room_id, friend_id } => {
+            let _ = app_ctx.room_manager.send(RoomManagerCommand::InvitePlayer {
+                room_id,
+                inviter_id: player_id,
+                target_id: friend_id,
+            });
+        }
+
         WSIncomingMessage::PlayWithBots { stake, currency, league, difficulty } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
@@ -142,6 +150,7 @@ async fn handle_incoming(
             stake,
             currency,
             league,
+            name,
             password_hash,
         } => {
             let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&stake).unwrap_or(0);
@@ -176,6 +185,7 @@ async fn handle_incoming(
                         currency,
                         league,
                     },
+                    name: name.clone(),
                     players: vec![player_id],
                     password_hash: password_hash.clone(),
                     kind: if password_hash.is_some() {
