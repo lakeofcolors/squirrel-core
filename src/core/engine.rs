@@ -402,6 +402,14 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         }
                     }
                 }
+                RoomManagerCommand::SponsorPlayer { player, room_id, target_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if let Some(actor) = &room.actor {
+                            let _ = actor.send(RoomActorCommand::SponsorPlayer { player, target_id });
+                        }
+                    }
+                }
+
                 RoomManagerCommand::Taunt { player, room_id, taunt_id } => {
                     if let Some(room) = rooms.get(&room_id) {
                         if let Some(actor) = &room.actor {
@@ -1039,6 +1047,26 @@ fn start_room_actor(
                         WSEvent::SpectatorCountUpdated { count: spectators.len() }
                     ).await;
                 }
+                RoomActorCommand::SponsorPlayer { player, target_id } => {
+                    let pool = &app_ctx.db_pool;
+                    if let Ok(Some(sender)) = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player).fetch_optional(pool).await {
+                        let coins = sender.free_coins;
+                        if coins >= stake + 1 {
+                            let _ = sqlx::query!("UPDATE users SET free_coins = free_coins - 1 WHERE telegram_id = $1", player).execute(pool).await;
+                            let _ = sqlx::query!("UPDATE users SET free_coins = COALESCE(free_coins, 0) + 1 WHERE telegram_id = $1", target_id).execute(pool).await;
+                            let mut all_targets = player_ids.clone();
+                            all_targets.extend(spectators.iter());
+                            let _ = app_ctx.connection_pool().broadcast(
+                                all_targets,
+                                WSEvent::SponsorAction {
+                                    from_id: player,
+                                    to_id: target_id,
+                                }
+                            ).await;
+                        }
+                    }
+                }
+
                 RoomActorCommand::Taunt { player, taunt_id } => {
                     if let Some(position) = player_positions.get_by_left(&player) {
                         let mut all_targets = player_ids.clone();

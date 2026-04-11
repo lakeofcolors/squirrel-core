@@ -296,6 +296,16 @@ async fn handle_incoming(
             }
         }
 
+        WSIncomingMessage::SponsorPlayer { room_id, target_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::SponsorPlayer {
+                    player: player_id,
+                    room_id,
+                    target_id,
+                }
+            );
+        }
+
         WSIncomingMessage::Taunt { room_id, taunt_id } => {
             let _ = app_ctx.room_manager.send(
                 RoomManagerCommand::Taunt {

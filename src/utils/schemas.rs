@@ -111,6 +111,7 @@ pub enum RoomManagerCommand {
     PlayerDisconnected { player: PlayerId, room_id: RoomId },
     PlayerReady { player: PlayerId, room_id: RoomId },
     Taunt { player: PlayerId, room_id: RoomId, taunt_id: String },
+    SponsorPlayer { player: PlayerId, room_id: RoomId, target_id: i64 },
 }
 
 #[derive(Debug)]
@@ -126,6 +127,7 @@ pub enum RoomActorCommand{
     ReadyTimeout,
     TurnTimeout { player: PlayerId, turn: u64 },
     Taunt { player: PlayerId, taunt_id: String },
+    SponsorPlayer { player: PlayerId, target_id: i64 },
 }
 
 
@@ -624,6 +626,7 @@ pub enum WSEvent {
     ReadyCheckStarted { expires_at: u64, room_id: RoomId, players: Vec<PlayerMeta> },
     ReadyCheckUpdate { ready_players: Vec<PlayerId> },
     Taunt { position: PlayerPosition, taunt_id: String },
+    SponsorAction { from_id: i64, to_id: i64 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -681,5 +684,6 @@ pub enum WSIncomingMessage {
     SubscribeRooms,
     UnsubscribeRooms,
     PlayCard{room_id: RoomId, rank: String, suit: String},
+    SponsorPlayer { room_id: RoomId, target_id: i64 },
     Taunt{room_id: RoomId, taunt_id: String},
 }
