@@ -330,7 +330,7 @@ async fn handle_socket(
 
     let profile = match sqlx::query!(
         r#"
-        SELECT telegram_id as id, username, rating, photo_url
+        SELECT telegram_id as id, username, rating, photo_url, xp
         FROM users
         WHERE telegram_id = $1
         "#,
@@ -351,6 +351,7 @@ async fn handle_socket(
             username: p.username,
             photo_url: p.photo_url,
             rating: p.rating,
+            xp: p.xp,
             is_bot: false,
             bot_difficulty: None,
         },
@@ -359,6 +360,7 @@ async fn handle_socket(
             username: None,
             photo_url: None,
             rating: 0,
+            xp: 0,
             is_bot: false,
             bot_difficulty: None,
         },

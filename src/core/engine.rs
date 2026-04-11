@@ -117,6 +117,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                             photo_url: None,
                             is_bot: true,
                             bot_difficulty: Some(difficulty.clone()),
+                            xp: 0,
                         });
                     }
 
@@ -510,12 +511,7 @@ async fn process_game_rewards(
             let rating_delta = if is_bot_match { 0 } else if is_leaver { penalty_rating } else { compensation_rating };
             let nuts_delta = if is_bot_match { 0 } else if is_leaver { penalty_nuts } else { compensation_nuts };
             
-            if !is_bot_match {
-                let _ = sqlx::query!(
-                    "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
-                    rating_delta, nuts_delta, player.id
-                ).execute(&mut *db_tx).await;
-            }
+            update_player_rewards(&mut db_tx, player.id, rating_delta, nuts_delta, !is_leaver, is_leaver, is_bot_match).await;
 
             let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
             let result_str = if is_leaver { "abandoned" } else { "win" };
@@ -555,12 +551,7 @@ async fn process_game_rewards(
             let nuts_delta = if is_bot_match { 0 } else if is_winner { win_nuts } else { lose_nuts };
             let result_str = if is_winner { "win" } else { "lose" };
 
-            if !is_bot_match {
-                let _ = sqlx::query!(
-                    "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2) WHERE telegram_id = $3",
-                    rating_delta, nuts_delta, player.id
-                ).execute(&mut *db_tx).await;
-            }
+            update_player_rewards(&mut db_tx, player.id, rating_delta, nuts_delta, is_winner, false, is_bot_match).await;
 
             let team_str = if team_kaskyr.contains(&player.id) { "Kaskyr" } else { "Uzi" };
 
@@ -584,6 +575,69 @@ async fn process_game_rewards(
     }
 
     let _ = db_tx.commit().await;
+}
+
+async fn update_player_rewards(
+    db_tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    player_id: i64,
+    rating_delta: i32,
+    nuts_delta: i32,
+    is_winner: bool,
+    is_leaver: bool,
+    is_bot_match: bool,
+) {
+    let user_info = sqlx::query!("SELECT xp_booster_ends_at, nuts_booster_ends_at FROM users WHERE telegram_id = $1", player_id)
+        .fetch_optional(&mut **db_tx).await.unwrap_or(None);
+
+    let has_xp_booster = user_info.as_ref().map_or(false, |u| u.xp_booster_ends_at.map_or(false, |ts| ts > chrono::Utc::now()));
+    let has_nuts_booster = user_info.as_ref().map_or(false, |u| u.nuts_booster_ends_at.map_or(false, |ts| ts > chrono::Utc::now()));
+
+    let mut final_nuts_delta = nuts_delta;
+    if final_nuts_delta > 0 && has_nuts_booster {
+        final_nuts_delta *= 2;
+    }
+
+    let base_xp = if is_bot_match {
+        if is_winner { 20 } else { 10 }
+    } else {
+        if is_winner { 50 } else if is_leaver { 0 } else { 15 }
+    };
+
+    let mut final_xp = base_xp;
+    if final_xp > 0 && has_xp_booster {
+        final_xp *= 2;
+    }
+
+    let _ = sqlx::query!(
+        "UPDATE users SET rating = GREATEST(0, rating + $1), free_coins = GREATEST(0, free_coins + $2), xp = xp + $3 WHERE telegram_id = $4",
+        rating_delta, final_nuts_delta, final_xp, player_id
+    ).execute(&mut **db_tx).await;
+
+    let quest_type = if is_bot_match {
+        if is_winner { vec!["play_bot", "win_bot"] } else { vec!["play_bot"] }
+    } else if is_leaver {
+        vec![]
+    } else {
+        if is_winner { vec!["play_ranked", "win_ranked"] } else { vec!["play_ranked"] }
+    };
+
+    if !quest_type.is_empty() {
+        let _ = sqlx::query(
+            "UPDATE user_quest_progress 
+             SET current_amount = current_amount + 1 
+             WHERE telegram_id = $1 
+             AND is_completed = FALSE 
+             AND quest_id IN (SELECT id FROM event_quests WHERE quest_type = ANY($2) AND event_id IN (SELECT id FROM events WHERE is_active = TRUE AND start_time <= NOW() AND end_time >= NOW()))"
+        ).bind(player_id).bind(&quest_type).execute(&mut **db_tx).await;
+
+        let _ = sqlx::query(
+            "UPDATE user_quest_progress 
+             SET is_completed = TRUE 
+             WHERE telegram_id = $1 
+             AND is_completed = FALSE 
+             AND current_amount >= (SELECT target_amount FROM event_quests WHERE id = user_quest_progress.quest_id)"
+        ).bind(player_id).execute(&mut **db_tx).await;
+    }
 }
 
 fn start_room_actor(

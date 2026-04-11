@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_quest_progress SET is_claimed = TRUE WHERE telegram_id = $1 AND quest_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4842a8d687738e4bd704a1a6681032ad4e899a6decf8a53fede8fe592b7c35b6"
+}

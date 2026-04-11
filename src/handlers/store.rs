@@ -48,6 +48,7 @@ pub struct StoreResponse {
     pub decks: Vec<StoreCosmeticDto>,
     pub backgrounds: Vec<StoreCosmeticDto>,
     pub taunts: Vec<StoreCosmeticDto>,
+    pub boosters: Vec<StoreCosmeticDto>,
     pub balance_nuts: i64,
 }
 
@@ -320,9 +321,11 @@ pub async fn get_store(
     .bind(telegram_id)
     .fetch_all(&app_ctx.db_pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "cosmetics error".to_string()))?;    let mut decks = vec![];
-    let mut backgrounds = vec![];
-    let mut taunts = vec![];
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "cosmetics error".to_string()))?;
+    let mut decks = Vec::new();
+    let mut backgrounds = Vec::new();
+    let mut taunts = Vec::new();
+    let mut boosters = Vec::new();
 
     for row in cosmetics {
         let dto = StoreCosmeticDto {
@@ -342,6 +345,8 @@ pub async fn get_store(
             backgrounds.push(dto);
         } else if dto.item_type == "taunt" {
             taunts.push(dto);
+        } else if dto.item_type == "booster" {
+            boosters.push(dto);
         }
     }
 
@@ -350,6 +355,7 @@ pub async fn get_store(
         decks,
         backgrounds,
         taunts,
+        boosters,
         balance_nuts,
     }))
 }

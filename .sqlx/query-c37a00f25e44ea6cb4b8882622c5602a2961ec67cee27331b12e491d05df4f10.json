@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users \n                 SET nuts_booster_ends_at = GREATEST(NOW(), COALESCE(nuts_booster_ends_at, NOW())) + INTERVAL '1 hour'\n                 WHERE telegram_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c37a00f25e44ea6cb4b8882622c5602a2961ec67cee27331b12e491d05df4f10"
+}

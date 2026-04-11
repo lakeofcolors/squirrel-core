@@ -21,6 +21,9 @@ pub struct PlayerMeta{
     pub username: Option<String>,
     pub rating: i32,
     pub photo_url: Option<String>,
+    #[sqlx(default)] 
+    #[serde(default)]
+    pub xp: i32,
     #[sqlx(default)]
     #[serde(default)]
     pub is_bot: bool,

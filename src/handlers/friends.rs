@@ -265,6 +265,23 @@ pub async fn accept_request(
         req.from_telegram_id, req.to_telegram_id
     ).execute(&mut *tx).await;
 
+    // Track quest progress for both users
+    let _ = sqlx::query(
+        "UPDATE user_quest_progress 
+         SET current_amount = current_amount + 1 
+         WHERE telegram_id = ANY($1) 
+         AND is_completed = FALSE 
+         AND quest_id IN (SELECT id FROM event_quests WHERE quest_type = 'add_friend' AND event_id IN (SELECT id FROM events WHERE is_active = TRUE AND start_time <= NOW() AND end_time >= NOW()))"
+    ).bind(&vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
+
+    let _ = sqlx::query(
+        "UPDATE user_quest_progress 
+         SET is_completed = TRUE 
+         WHERE telegram_id = ANY($1) 
+         AND is_completed = FALSE 
+         AND current_amount >= (SELECT target_amount FROM event_quests WHERE id = user_quest_progress.quest_id)"
+    ).bind(&vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
+
     tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))

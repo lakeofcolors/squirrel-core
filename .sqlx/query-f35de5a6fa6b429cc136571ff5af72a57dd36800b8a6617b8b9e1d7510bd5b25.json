@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT eq.reward_type, eq.reward_amount, eq.event_id, uqp.is_completed, uqp.is_claimed \n         FROM event_quests eq\n         JOIN user_quest_progress uqp ON eq.id = uqp.quest_id\n         WHERE eq.id = $1 AND uqp.telegram_id = $2 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reward_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "reward_amount",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "is_completed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_claimed",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f35de5a6fa6b429cc136571ff5af72a57dd36800b8a6617b8b9e1d7510bd5b25"
+}
