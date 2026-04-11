@@ -47,6 +47,7 @@ pub struct StoreResponse {
     pub nuts_packs: Vec<StoreNutsPackDto>,
     pub decks: Vec<StoreCosmeticDto>,
     pub backgrounds: Vec<StoreCosmeticDto>,
+    pub taunts: Vec<StoreCosmeticDto>,
     pub balance_nuts: i64,
 }
 
@@ -320,8 +321,8 @@ pub async fn get_store(
     .fetch_all(&app_ctx.db_pool)
     .await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "cosmetics error".to_string()))?;    let mut decks = vec![];
-
     let mut backgrounds = vec![];
+    let mut taunts = vec![];
 
     for row in cosmetics {
         let dto = StoreCosmeticDto {
@@ -337,8 +338,10 @@ pub async fn get_store(
 
         if dto.item_type == "deck" {
             decks.push(dto);
-        } else {
+        } else if dto.item_type == "background" {
             backgrounds.push(dto);
+        } else if dto.item_type == "taunt" {
+            taunts.push(dto);
         }
     }
 
@@ -346,6 +349,7 @@ pub async fn get_store(
         nuts_packs,
         decks,
         backgrounds,
+        taunts,
         balance_nuts,
     }))
 }
@@ -566,7 +570,7 @@ pub async fn buy_item_for_nuts(
 ) -> Result<Json<BuyItemForNutsResponse>, (StatusCode, String)> {
     let telegram_id = auth_user.telegram_id;
 
-    if req.item_type != "deck" && req.item_type != "background" {
+    if req.item_type != "deck" && req.item_type != "background" && req.item_type != "taunt" {
         return Err((StatusCode::BAD_REQUEST, "Invalid item_type".to_string()));
     }
 
