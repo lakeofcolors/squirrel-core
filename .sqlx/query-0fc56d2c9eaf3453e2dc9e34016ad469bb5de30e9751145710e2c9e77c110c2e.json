@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET free_coins = free_coins - $1 WHERE telegram_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0fc56d2c9eaf3453e2dc9e34016ad469bb5de30e9751145710e2c9e77c110c2e"
+}

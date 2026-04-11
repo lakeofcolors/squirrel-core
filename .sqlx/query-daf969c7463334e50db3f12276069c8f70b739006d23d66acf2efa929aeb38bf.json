@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, item_type, item_key, rarity, price_nuts FROM store_cosmetics WHERE rarity = ANY($1) AND is_active = TRUE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "item_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "item_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "rarity",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "price_nuts",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "daf969c7463334e50db3f12276069c8f70b739006d23d66acf2efa929aeb38bf"
+}

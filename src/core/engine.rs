@@ -402,6 +402,13 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         }
                     }
                 }
+                RoomManagerCommand::Taunt { player, room_id, taunt_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if let Some(actor) = &room.actor {
+                            let _ = actor.send(RoomActorCommand::Taunt { player, taunt_id });
+                        }
+                    }
+                }
            }
 
         debug!("Processed cmd. Total rooms: {}, Subscribers: {}", rooms.len(), room_subscribers.len());
@@ -1031,6 +1038,19 @@ fn start_room_actor(
                         all_targets,
                         WSEvent::SpectatorCountUpdated { count: spectators.len() }
                     ).await;
+                }
+                RoomActorCommand::Taunt { player, taunt_id } => {
+                    if let Some(position) = player_positions.get_by_left(&player) {
+                        let mut all_targets = player_ids.clone();
+                        all_targets.extend(spectators.iter());
+                        let _ = app_ctx.connection_pool().broadcast(
+                            all_targets,
+                            WSEvent::Taunt {
+                                position: *position,
+                                taunt_id,
+                            }
+                        ).await;
+                    }
                 }
                 RoomActorCommand::PlayerReady { .. } | RoomActorCommand::ReadyTimeout => {}
             };

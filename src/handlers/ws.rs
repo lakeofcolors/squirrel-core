@@ -295,6 +295,16 @@ async fn handle_incoming(
                 }
             }
         }
+
+        WSIncomingMessage::Taunt { room_id, taunt_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::Taunt {
+                    player: player_id,
+                    room_id,
+                    taunt_id,
+                },
+            );
+        }
     }
 }
 

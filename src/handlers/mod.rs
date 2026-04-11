@@ -5,3 +5,5 @@ pub mod rating;
 pub mod profile;
 pub mod friends;
 pub mod history;
+pub mod chests;
+pub mod daily;

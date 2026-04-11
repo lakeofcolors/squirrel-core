@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT last_daily_claim, daily_streak FROM users WHERE telegram_id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_daily_claim",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "daily_streak",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "480b33a65c33f29a560c702ed30c7f115d950d6d69b5c53b773808c8f7d96fe0"
+}

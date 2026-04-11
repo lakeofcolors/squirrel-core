@@ -1,0 +1,3 @@
+ALTER TABLE users
+ADD COLUMN last_daily_claim TIMESTAMPTZ,
+ADD COLUMN daily_streak INTEGER NOT NULL DEFAULT 0;

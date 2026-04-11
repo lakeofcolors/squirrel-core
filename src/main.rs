@@ -15,6 +15,8 @@ use crate::handlers::rating::get_leaderboard;
 use crate::handlers::profile::get_profile;
 use crate::handlers::history::get_match_replay;
 use crate::handlers::friends::{get_friends, consume_invite, send_request, get_requests, accept_request, decline_request};
+use crate::handlers::chests::{get_chests, open_chest, buy_chest};
+use crate::handlers::daily::{get_daily_status, claim_daily_reward};
 use crate::utils::db::pg_pool;
 pub mod handlers;
 pub mod utils;
@@ -72,6 +74,11 @@ async fn main() {
         .route("/v1/friends/requests/:id/accept", post(accept_request))
         .route("/v1/friends/requests/:id/decline", post(decline_request))
         .route("/v1/history/:match_id/replay", get(get_match_replay))
+        .route("/v1/chests", get(get_chests))
+        .route("/v1/chests/open", post(open_chest))
+        .route("/v1/chests/buy", post(buy_chest))
+        .route("/v1/daily_reward", get(get_daily_status))
+        .route("/v1/daily_reward/claim", post(claim_daily_reward))
         .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))

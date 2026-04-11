@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_chests (telegram_id, chest_type, amount) VALUES ($1, $2, 1) ON CONFLICT (telegram_id, chest_type) DO UPDATE SET amount = user_chests.amount + 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3435ec1666e520feb5966b8067a8db6d6f4db5ce86735f6f3f70f03276fe68ad"
+}
