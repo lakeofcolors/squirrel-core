@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT telegram_id as id, username, rating, photo_url\n        FROM users\n        WHERE telegram_id = $1\n        ",
+  "query": "\n        SELECT telegram_id as id, username, rating, photo_url, xp\n        FROM users\n        WHERE telegram_id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "photo_url",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "xp",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       false,
       true,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "91ab12fcc79eee5cff8e6d37de4093a4f10de762c4fd20b761d11ace1ea41802"
+  "hash": "ebf1c0d006383c94907a01fc337110cc083be19f46aeabb4678ce21b9a72cdfc"
 }
