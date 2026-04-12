@@ -173,6 +173,12 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     room.actor = Some(room_actor);
                 }
                 RoomManagerCommand::GhostBotTick => {
+                    let active_ghosts: std::collections::HashSet<i64> = rooms.values()
+                        .flat_map(|r| r.meta.players.iter())
+                        .filter(|p| p.is_ghost)
+                        .map(|p| p.id)
+                        .collect();
+
                     let online_count = app_ctx.connection_pool().count();
                     
                     if online_count < 5 {
@@ -210,12 +216,16 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     JOIN users u ON gb.telegram_id = u.telegram_id
                                     WHERE gb.is_active = true
                                     ORDER BY RANDOM()
-                                    LIMIT 4
+                                    LIMIT 50
                                     "#
                                 ).fetch_all(&app_ctx.db_pool).await.unwrap_or_default();
                                 
+                                let available_ghosts: Vec<_> = rows.into_iter()
+                                    .filter(|r| !active_ghosts.contains(&r.telegram_id))
+                                    .collect();
+                                
                                 let mut players_meta = vec![];
-                                for r in rows {
+                                for r in available_ghosts.into_iter().take(4) {
                                     players_meta.push(PlayerMeta {
                                         id: r.telegram_id,
                                         username: r.username,
@@ -273,17 +283,24 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     }
                 }
                 RoomManagerCommand::InjectBotToRoom { room_id } => {
-                    let row = sqlx::query!(
+                    let active_ghosts: std::collections::HashSet<i64> = rooms.values()
+                        .flat_map(|r| r.meta.players.iter())
+                        .filter(|p| p.is_ghost)
+                        .map(|p| p.id)
+                        .collect();
+
+                    let rows = sqlx::query!(
                         r#"
                         SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp
                         FROM ghost_bots gb
                         JOIN users u ON gb.telegram_id = u.telegram_id
                         WHERE gb.is_active = true
                         ORDER BY RANDOM()
-                        LIMIT 1
+                        LIMIT 20
                         "#
-                    ).fetch_optional(&app_ctx.db_pool).await.unwrap_or(None);
+                    ).fetch_all(&app_ctx.db_pool).await.unwrap_or_default();
                     
+                    let row = rows.into_iter().find(|r| !active_ghosts.contains(&r.telegram_id));
                     let Some(r) = row else { continue; };
                     
                     let bot_meta = PlayerMeta {
