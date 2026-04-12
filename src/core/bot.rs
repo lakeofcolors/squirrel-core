@@ -7,7 +7,11 @@ pub fn determine_bot_move(state: &GameState, player: PlayerPosition, difficulty:
         panic!("Bot has no cards to play");
     }
 
-    let valid_cards = get_valid_cards(state, player, hand);
+    let mut valid_cards = get_valid_cards(state, player, hand);
+    if valid_cards.is_empty() {
+        tracing::error!("Bot logic bug: get_valid_cards returned empty! Falling back to full hand to prevent crash. Hand: {:?}, Trick: {:?}", hand, state.current_trick);
+        valid_cards = hand.clone();
+    }
     
     match difficulty {
         BotDifficulty::Medium => {

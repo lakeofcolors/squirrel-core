@@ -342,6 +342,7 @@ pub struct GameState {
     pub team_scores: HashMap<Team, u16>,
     pub team_eye: HashMap<Team, u16>,
     pub current_turn: PlayerPosition,
+    pub round_start_turn: PlayerPosition,
     pub is_first_round: bool,
     pub attacking_team: Team,
     pub player_trump_map: HashMap<PlayerPosition, Suit>,
@@ -359,9 +360,10 @@ impl GameState {
         hands.insert(PlayerPosition::South, hands_vec[2].clone());
         hands.insert(PlayerPosition::West, hands_vec[3].clone());
 
+        let club_jack_owner = Self::find_club_jack_owner(hands.clone()).unwrap();
         Self {
             trump: Suit::Clubs,
-            club_jack_owner: Self::find_club_jack_owner(hands.clone()).unwrap(),
+            club_jack_owner,
             player_trump_map: Self::assign_player_trumps(hands.clone()),
             hands,
             current_trick: vec![],
@@ -370,7 +372,8 @@ impl GameState {
             attacking_team: Team::Kaskyr,
             team_scores: HashMap::from([(Team::Kaskyr, 0), (Team::Uzi, 0)]),
             team_eye: HashMap::from([(Team::Kaskyr, 0), (Team::Uzi, 0)]),
-            current_turn: PlayerPosition::North,
+            current_turn: club_jack_owner,
+            round_start_turn: club_jack_owner,
             is_first_round: true,
             paused: false,
         }
@@ -428,6 +431,9 @@ impl GameState {
 
         self.club_jack_owner = Self::find_club_jack_owner(new_hands.clone()).unwrap();
         self.hands = new_hands;
+        
+        self.round_start_turn = self.round_start_turn.next();
+        self.current_turn = self.round_start_turn;
     }
 
     pub fn update_team_score_afrer_round(&mut self){
