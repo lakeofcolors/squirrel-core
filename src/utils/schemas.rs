@@ -30,6 +30,9 @@ pub struct PlayerMeta{
     #[sqlx(default)]
     #[serde(default)]
     pub bot_difficulty: Option<BotDifficulty>,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub is_ghost: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,6 +100,8 @@ pub enum RoomManagerCommand {
         player: PlayerId,
         difficulty: BotDifficulty,
     },
+    GhostBotTick,
+    InjectBotToRoom { room_id: RoomId },
     JoinRoom { player: PlayerId, room_id: RoomId, password: Option<String> },
     LeaveRoom { player: PlayerId, room_id: RoomId },
     InvitePlayer { room_id: RoomId, inviter_id: PlayerId, target_id: PlayerId },
@@ -109,6 +114,7 @@ pub enum RoomManagerCommand {
     },
     SubscribeRooms { player: PlayerId },
     UnsubscribeRooms { player: PlayerId },
+    CheckGhostHandover { player: PlayerId },
 
     PlayCard{ player: PlayerId, room_id: RoomId, card: Card},
     PlayerTemporaryDisconnect{ player: PlayerId, room_id: RoomId },

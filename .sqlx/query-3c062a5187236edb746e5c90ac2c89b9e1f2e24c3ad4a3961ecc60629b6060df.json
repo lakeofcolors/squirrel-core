@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp\n                        FROM ghost_bots gb\n                        JOIN users u ON gb.telegram_id = u.telegram_id\n                        WHERE gb.is_active = true\n                        ORDER BY RANDOM()\n                        LIMIT 1\n                        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "telegram_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "rating",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "photo_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "xp",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "3c062a5187236edb746e5c90ac2c89b9e1f2e24c3ad4a3961ecc60629b6060df"
+}

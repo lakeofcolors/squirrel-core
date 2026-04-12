@@ -120,6 +120,11 @@ impl ConnectionPool{
             players: DashMap::new(),
         }
     }
+
+    pub fn count(&self) -> usize {
+        self.players.len()
+    }
+
     pub fn get(&self, player_id: &i64) -> Option<Arc<PlayerSession>>{
         self.players.get(player_id).map(|p| p.value().clone())
     }

@@ -364,6 +364,7 @@ async fn handle_socket(
             xp: p.xp,
             is_bot: false,
             bot_difficulty: None,
+            is_ghost: false,
         },
         None => PlayerMeta {
             id: player_id,
@@ -373,6 +374,7 @@ async fn handle_socket(
             xp: 0,
             is_bot: false,
             bot_difficulty: None,
+            is_ghost: false,
         },
     };
 
@@ -402,6 +404,12 @@ async fn handle_socket(
             RoomManagerCommand::PlayerReconnect {
                 player: player_id,
                 room_id,
+            }
+        );
+    } else {
+        let _ = app_ctx.room_manager.send(
+            RoomManagerCommand::CheckGhostHandover {
+                player: player_id,
             }
         );
     }
