@@ -1045,7 +1045,7 @@ fn start_room_actor(
                         tokio::spawn(async move {
                             use rand::Rng;
                             let delay_ms = if is_ghost_bot {
-                                rand::thread_rng().gen_range(5000..=20000)
+                                rand::thread_rng().gen_range(3000..=15000)
                             } else {
                                 1500
                             };
