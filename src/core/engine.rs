@@ -244,7 +244,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
 
                                 let room_meta = RoomMeta {
                                     id: room_id.clone(),
-                                    name: "Рейтинговая игра".to_string(), // Fake names
+                                    name: Uuid::new_v4().to_string()[..8].to_string(), // Fake names
                                     key: QueueKey {
                                         stake: rust_decimal::Decimal::new(100, 0),
                                         currency: crate::utils::schemas::Currency::Virtual,

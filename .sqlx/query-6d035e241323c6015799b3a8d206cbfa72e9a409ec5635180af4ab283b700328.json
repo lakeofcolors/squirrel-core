@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                                    SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp\n                                    FROM ghost_bots gb\n                                    JOIN users u ON gb.telegram_id = u.telegram_id\n                                    WHERE gb.is_active = true\n                                    ORDER BY RANDOM()\n                                    LIMIT 4\n                                    ",
+  "query": "\n                        SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp\n                        FROM ghost_bots gb\n                        JOIN users u ON gb.telegram_id = u.telegram_id\n                        WHERE gb.is_active = true\n                        ORDER BY RANDOM()\n                        LIMIT 20\n                        ",
   "describe": {
     "columns": [
       {
@@ -40,5 +40,5 @@
       false
     ]
   },
-  "hash": "cc204a133674dfdc1151d2bf3a2fc717048da3ed1506ef95ac2dad946e88e2aa"
+  "hash": "6d035e241323c6015799b3a8d206cbfa72e9a409ec5635180af4ab283b700328"
 }
