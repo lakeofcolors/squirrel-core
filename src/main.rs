@@ -84,6 +84,8 @@ async fn main() {
         .route("/v1/chests/buy", post(buy_chest))
         .route("/v1/daily_reward", get(get_daily_status))
         .route("/v1/daily_reward/claim", post(claim_daily_reward))
+        .route("/v1/spin", get(crate::handlers::spin::get_spin_info))
+        .route("/v1/spin/draw", post(crate::handlers::spin::draw_spin))
         .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))

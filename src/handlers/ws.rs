@@ -124,7 +124,7 @@ async fn handle_incoming(
             });
         }
 
-        WSIncomingMessage::PlayWithBots { stake, currency, league, difficulty } => {
+        WSIncomingMessage::PlayWithBots { stake, currency, league, difficulty, max_eyes } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
@@ -142,6 +142,7 @@ async fn handle_incoming(
                         league,
                     },
                     difficulty,
+                    max_eyes: max_eyes.unwrap_or(12),
                 },
             );
         }
@@ -152,6 +153,7 @@ async fn handle_incoming(
             league,
             name,
             password_hash,
+            max_eyes,
         } => {
             let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&stake).unwrap_or(0);
             if stake_val > 0 {
@@ -193,6 +195,7 @@ async fn handle_incoming(
                     } else {
                         RoomKind::Open
                     },
+                    max_eyes: max_eyes.unwrap_or(12),
                 },
             );
         }

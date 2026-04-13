@@ -26,7 +26,8 @@ fn try_match(
                 name: None,
                 players,
                 password_hash: None,
-                kind: RoomKind::Queue
+                kind: RoomKind::Queue,
+                max_eyes: 12
             }) {
                 error!("Failed to send RoomManagerCommand::CreateRoom: {:?}", e);
             }
@@ -56,7 +57,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
         while let Some(cmd) = rx.recv().await {
             debug!("Processing RoomManagerCommand: {:?}", cmd);
             match cmd {
-                RoomManagerCommand::CreateRoom { key, name, players, password_hash, kind } => {
+                RoomManagerCommand::CreateRoom { key, name, players, password_hash, kind, max_eyes } => {
                     let room_id = Uuid::new_v4().to_string();
                     let room_name = name.unwrap_or_else(|| Uuid::new_v4().to_string()[..8].to_string());
                     let players_meta: Vec<PlayerMeta> = players
@@ -84,7 +85,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         name: room_name,
                         key,
                         players: players_meta.clone(),
-                        kind
+                        kind,
+                        max_eyes
                     };
                     let room = rooms.entry(room_id.clone())
                          .or_insert(
@@ -114,12 +116,13 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                             room_id,
                             players_meta,
                             manager_tx.clone(),
-                            stake_value
+                            stake_value,
+                            max_eyes
                         );
                         room.actor = Some(room_actor);
                     }
                 }
-                RoomManagerCommand::CreateBotRoom { key, player, difficulty } => {
+                RoomManagerCommand::CreateBotRoom { key, player, difficulty, max_eyes } => {
                     let room_id = Uuid::new_v4().to_string();
                     let stake_value = key.stake.to_i32().unwrap_or(0);
 
@@ -147,7 +150,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         name: "Игра с ботами".to_string(),
                         key,
                         players: players_meta.clone(),
-                        kind: RoomKind::BotMatch
+                        kind: RoomKind::BotMatch,
+                        max_eyes
                     };
 
                     let room = rooms.entry(room_id.clone())
@@ -168,7 +172,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         room_id,
                         players_meta,
                         manager_tx.clone(),
-                        stake_value
+                        stake_value,
+                        max_eyes
                     );
                     room.actor = Some(room_actor);
                 }
@@ -251,7 +256,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                         league: crate::utils::schemas::League::Bronze,
                                     },
                                     players: players_meta.clone(),
-                                    kind: RoomKind::Queue
+                                    kind: RoomKind::Queue,
+                                    max_eyes: 12
                                 };
 
                                 let room = Room {
@@ -272,7 +278,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     room_id.clone(),
                                     players_meta,
                                     manager_tx.clone(),
-                                    100
+                                    100,
+                                    12
                                 );
                                 
                                 if let Some(r) = rooms.get_mut(&room_id) {
@@ -337,7 +344,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     room_id.clone(),
                                     players_cloned.clone(),
                                     manager_tx.clone(),
-                                    room.meta.key.stake.to_i32().unwrap_or(0)
+                                    room.meta.key.stake.to_i32().unwrap_or(0),
+                                    room.meta.max_eyes
                                 );
                                 room.actor = Some(room_actor);
                                 
@@ -464,7 +472,8 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     room_id.clone(),
                                     room.meta.players.clone(),
                                     manager_tx.clone(),
-                                    room.meta.key.stake.to_i32().unwrap_or(0)
+                                    room.meta.key.stake.to_i32().unwrap_or(0),
+                                    room.meta.max_eyes
                                 );
                                 room.actor = Some(room_actor)
                             }
@@ -877,6 +886,7 @@ fn start_room_actor(
     mut players: Vec<PlayerMeta>,
     room_manager_tx: mpsc::UnboundedSender<RoomManagerCommand>,
     stake: i32,
+    max_eyes: u16,
 ) -> mpsc::UnboundedSender<RoomActorCommand> {
     fn build_snapshot(
         room_id: &RoomId,
@@ -1148,8 +1158,8 @@ fn start_room_actor(
                                         }
                                     }
 
-                                    if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= 12 || eye.get(&Team::Uzi).copied().unwrap_or(0) >= 12 {
-                                        let winner_team = if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= 12 {
+                                    if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= max_eyes || eye.get(&Team::Uzi).copied().unwrap_or(0) >= max_eyes {
+                                        let winner_team = if eye.get(&Team::Kaskyr).copied().unwrap_or(0) >= max_eyes {
                                             Team::Kaskyr
                                         } else {
                                             Team::Uzi

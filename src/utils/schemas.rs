@@ -93,12 +93,14 @@ pub enum RoomManagerCommand {
         name: Option<String>,
         players: Vec<PlayerId>,
         password_hash: Option<Hash>,
-        kind: RoomKind
+        kind: RoomKind,
+        max_eyes: u16,
     },
     CreateBotRoom {
         key: QueueKey,
         player: PlayerId,
         difficulty: BotDifficulty,
+        max_eyes: u16,
     },
     GhostBotTick,
     InjectBotToRoom { room_id: RoomId },
@@ -158,7 +160,12 @@ pub struct RoomMeta{
     pub key: QueueKey,
     pub kind: RoomKind,
     pub players: Vec<PlayerMeta>,
+    #[serde(default = "default_max_eyes")]
+    pub max_eyes: u16,
+}
 
+fn default_max_eyes() -> u16 {
+    12
 }
 
 
@@ -453,14 +460,13 @@ impl GameState {
         if a == 120 {
             let entry = self.team_eye.entry(Team::Kaskyr).or_insert(0);
             *entry += 12;
-            if *entry > 12 { *entry = 12; }
+            // NOTE: the engine will check max_eyes, we just add 12 since gaining 120 points always earns the maximum eyes possible natively.
             return Some(Team::Kaskyr);
         }
 
         if b == 120 {
             let entry = self.team_eye.entry(Team::Uzi).or_insert(0);
             *entry += 12;
-            if *entry > 12 { *entry = 12; }
             return Some(Team::Uzi);
         }
 
@@ -486,7 +492,6 @@ impl GameState {
 
         let entry = self.team_eye.entry(winner).or_insert(0);
         *entry += eyes;
-        if *entry > 12 { *entry = 12; }
         
         self.is_first_round = false;
 
@@ -699,8 +704,8 @@ pub struct SubManageMsg {
 pub enum WSIncomingMessage {
     FindGame{stake: Decimal, currency: Currency, league: League},
     CancelSearch{stake: Decimal, currency: Currency, league: League},
-    PlayWithBots{stake: Decimal, currency: Currency, league: League, difficulty: BotDifficulty},
-    CreateRoom{stake: Decimal, currency: Currency, league: League, name: Option<String>, password_hash: Option<Hash>},
+    PlayWithBots{stake: Decimal, currency: Currency, league: League, difficulty: BotDifficulty, max_eyes: Option<u16>},
+    CreateRoom{stake: Decimal, currency: Currency, league: League, name: Option<String>, password_hash: Option<Hash>, max_eyes: Option<u16>},
     InviteFriend{room_id: RoomId, friend_id: i64},
     JoinRoom { room_id: RoomId, password: Option<String> },
     LeaveRoom { room_id: RoomId },

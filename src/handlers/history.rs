@@ -35,7 +35,7 @@ pub async fn get_match_replay(
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query match".to_string()))?
     .ok_or((StatusCode::NOT_FOUND, "Match not found".to_string()))?;
 
-    let replay_events: Vec<serde_json::Value> = row.try_get("replay_events").unwrap_or_else(|_| vec![]);
+    let replay_events: sqlx::types::Json<Vec<serde_json::Value>> = row.try_get("replay_events").unwrap_or_else(|_| sqlx::types::Json(vec![]));
 
     let players_rows = sqlx::query(
         r#"
@@ -73,7 +73,7 @@ pub async fn get_match_replay(
 
     Ok(Json(ReplayResponse {
         match_id,
-        events: replay_events,
+        events: replay_events.0,
         players,
     }))
 }
