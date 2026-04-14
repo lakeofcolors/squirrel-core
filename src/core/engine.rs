@@ -577,7 +577,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         continue;
                     };
 
-                    let _ = actor.send(RoomActorCommand::PlayCard { player, card });
+                    let _ = actor.send(RoomActorCommand::PlayCard { player, card, is_bot_move: false });
                 }
 
                 RoomManagerCommand::PlayerReady { player, room_id } => {
@@ -1060,7 +1060,7 @@ fn start_room_actor(
                                 1500
                             };
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                            let _ = tx_clone.send(RoomActorCommand::PlayCard { player: bot_id_val, card: best_card });
+                            let _ = tx_clone.send(RoomActorCommand::PlayCard { player: bot_id_val, card: best_card, is_bot_move: true });
                         });
                     }
                 }
@@ -1084,7 +1084,16 @@ fn start_room_actor(
         while let Some(cmd) = rx.recv().await {
             debug!("Room {} processing ActorCommand: {:?}", room_id, cmd);
             match cmd {
-                RoomActorCommand::PlayCard { player, card } => {
+                RoomActorCommand::PlayCard { player, card, is_bot_move } => {
+                    if is_bot_move {
+                        if let Some(p) = players.iter().find(|p| p.id == player) {
+                            if !p.is_bot && !p.is_ghost {
+                                warn!("Ignoring BotPlayCard for {}, player is now human", player);
+                                continue;
+                            }
+                        }
+                    }
+
                     let Some(player_position) = player_positions.get_by_left(&player) else {
                         warn!("Room {} received PlayCard from player {} who is not in the room. Ignoring.", room_id, player);
                         continue;
@@ -1323,7 +1332,11 @@ fn start_room_actor(
                     }
 
                     if disconnected.is_empty() {
+                        let was_paused = state.paused;
                         state.paused = false;
+                        if was_paused {
+                            trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
+                        }
                     }
                 }
                 RoomActorCommand::PlayerSurrendered { player } => {
@@ -1562,7 +1575,7 @@ mod tests {
         let attacker_id = 999;
         let card = Card { suit: crate::utils::schemas::Suit::Spades, rank: crate::utils::schemas::Rank::Ace };
         
-        let res = actor_tx.send(RoomActorCommand::PlayCard { player: attacker_id, card });
+        let res = actor_tx.send(RoomActorCommand::PlayCard { player: attacker_id, card, is_bot_move: false });
         assert!(res.is_ok());
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;

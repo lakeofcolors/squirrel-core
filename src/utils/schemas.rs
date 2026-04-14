@@ -129,7 +129,7 @@ pub enum RoomManagerCommand {
 
 #[derive(Debug)]
 pub enum RoomActorCommand{
-    PlayCard{ player: PlayerId, card: Card},
+    PlayCard{ player: PlayerId, card: Card, is_bot_move: bool },
     PlayerTemporaryDisconnect{ player: PlayerId },
     PlayerReconnect{ player: PlayerId },
     PlayerDisconnected { player: PlayerId },
@@ -356,6 +356,7 @@ pub struct GameState {
     pub club_jack_owner: PlayerPosition,
     pub suits_played: HashSet<Suit>,
     pub paused: bool,
+    pub eggs_active: bool,
 }
 
 impl GameState {
@@ -383,6 +384,7 @@ impl GameState {
             round_start_turn: club_jack_owner,
             is_first_round: true,
             paused: false,
+            eggs_active: false,
         }
     }
 
@@ -454,6 +456,7 @@ impl GameState {
 
         if a == 60 && b == 60 {
             self.attacking_team = if self.attacking_team == Team::Kaskyr { Team::Uzi } else { Team::Kaskyr };
+            self.eggs_active = true;
             return None;
         }
 
@@ -488,6 +491,11 @@ impl GameState {
             if winner != self.attacking_team {
                 eyes = 2;
             }
+        }
+
+        if self.eggs_active {
+            eyes = 4;
+            self.eggs_active = false;
         }
 
         let entry = self.team_eye.entry(winner).or_insert(0);
