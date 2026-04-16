@@ -1,6 +1,16 @@
 use rand::seq::SliceRandom;
 use crate::utils::schemas::{BotDifficulty, Card, GameState, PlayerPosition, Rank, Suit};
 
+fn is_teammate(p1: PlayerPosition, p2: PlayerPosition) -> bool {
+    matches!(
+        (p1, p2),
+        (PlayerPosition::North, PlayerPosition::South) | (PlayerPosition::South, PlayerPosition::North) |
+        (PlayerPosition::East, PlayerPosition::West) | (PlayerPosition::West, PlayerPosition::East) |
+        (PlayerPosition::North, PlayerPosition::North) | (PlayerPosition::South, PlayerPosition::South) |
+        (PlayerPosition::East, PlayerPosition::East) | (PlayerPosition::West, PlayerPosition::West)
+    )
+}
+
 pub fn determine_bot_move(state: &GameState, player: PlayerPosition, difficulty: BotDifficulty) -> Card {
     let hand = state.hands.get(&player).expect("Bot hand not found");
     if hand.is_empty() {
@@ -36,21 +46,44 @@ pub fn determine_bot_move(state: &GameState, player: PlayerPosition, difficulty:
                 let trump = state.trump;
                 
                 // Find the current winning card and its power
-                let current_winner = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().1;
-                let winning_power = current_winner.power(lead_card.suit, trump);
+                let current_winner_pos = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().0;
+                let current_winner_card = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().1;
+                let winning_power = current_winner_card.power(lead_card.suit, trump);
+                
+                let teammate_is_winning = is_teammate(player, current_winner_pos);
 
-                // Find cards that can beat the current winning card
-                let mut winning_cards: Vec<Card> = valid_cards.iter().filter(|c| c.power(lead_card.suit, trump) > winning_power).copied().collect();
-
-                if !winning_cards.is_empty() {
-                    // Play the valid winning card with the lowest power (don't overspend)
-                    winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
-                    winning_cards[0]
+                if teammate_is_winning {
+                    let forced_to_win = valid_cards.iter().all(|c| c.power(lead_card.suit, trump) > winning_power);
+                    if forced_to_win {
+                        let mut winning_cards = valid_cards;
+                        winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
+                        winning_cards[0]
+                    } else {
+                        let mut losing_cards: Vec<Card> = valid_cards.into_iter().filter(|c| c.power(lead_card.suit, trump) <= winning_power).collect();
+                        if state.current_trick.len() == 3 {
+                            // Last player, give max points!
+                            losing_cards.sort_by_key(|c| c.points());
+                            losing_cards.last().copied().unwrap()
+                        } else {
+                            // Not last, minimize risk
+                            losing_cards.sort_by_key(|c| (c.power(lead_card.suit, trump), c.points()));
+                            losing_cards[0]
+                        }
+                    }
                 } else {
-                    // Cannot win trick, throw cheapest card
-                    let mut losing_cards = valid_cards;
-                    losing_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
-                    losing_cards[0]
+                    // Opponent is winning
+                    let mut winning_cards: Vec<Card> = valid_cards.iter().filter(|c| c.power(lead_card.suit, trump) > winning_power).copied().collect();
+
+                    if !winning_cards.is_empty() {
+                        // Play the valid winning card with the lowest power (don't overspend)
+                        winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
+                        winning_cards[0]
+                    } else {
+                        // Cannot win trick, throw cheapest card
+                        let mut losing_cards = valid_cards;
+                        losing_cards.sort_by_key(|c| (c.power(lead_card.suit, trump), c.points()));
+                        losing_cards[0]
+                    }
                 }
             }
         }
@@ -143,26 +176,53 @@ pub fn analyze_and_hint(state: &GameState, player: PlayerPosition) -> (Option<Ca
     } else {
         let lead_card = state.current_trick[0].1;
         let trump = state.trump;
-        let current_winner = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().1;
-        let winning_power = current_winner.power(lead_card.suit, trump);
+        let current_winner_pos = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().0;
+        let current_winner_card = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().1;
+        let winning_power = current_winner_card.power(lead_card.suit, trump);
 
-        let mut winning_cards: Vec<Card> = valid_cards.iter().filter(|c| c.power(lead_card.suit, trump) > winning_power).copied().collect();
+        let teammate_is_winning = is_teammate(player, current_winner_pos);
 
-        if !winning_cards.is_empty() {
-            winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
-            let best_card = winning_cards[0];
-            let reason = if best_card.rank == Rank::Jack || best_card.suit == trump {
-                "Эту взятку перебить можно только козырем! Кладем его, чтобы забрать очки.".to_string()
+        if teammate_is_winning {
+            let forced_to_win = valid_cards.iter().all(|c| c.power(lead_card.suit, trump) > winning_power);
+            if forced_to_win {
+                let mut winning_cards = valid_cards;
+                winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
+                let best_card = winning_cards[0];
+                let reason = "Эту взятку и так забирает наш напарник, но правила заставляют нас перебить его. Скидываем самую слабую из подходящих карт.".to_string();
+                return (Some(best_card), reason);
             } else {
-                "У нас есть подходящая карта, чтобы забрать взятку! Используем её экономно.".to_string()
-            };
-            return (Some(best_card), reason);
+                let mut losing_cards: Vec<Card> = valid_cards.into_iter().filter(|c| c.power(lead_card.suit, trump) <= winning_power).collect();
+                if state.current_trick.len() == 3 {
+                    losing_cards.sort_by_key(|c| c.points());
+                    let best_card = *losing_cards.last().unwrap();
+                    let reason = "Взятку гарантированно забирает наш напарник! «Мажемся» — скидываем самую «жирную» по очкам карту, чтобы принести команде максимум очков.".to_string();
+                    return (Some(best_card), reason);
+                } else {
+                    losing_cards.sort_by_key(|c| (c.power(lead_card.suit, trump), c.points()));
+                    let best_card = losing_cards[0];
+                    let reason = "Напарник пока побеждает во взятке, но после нас еще ходят оппоненты. На всякий случай скидываем слабую карту (не рискуем очками).".to_string();
+                    return (Some(best_card), reason);
+                }
+            }
         } else {
-            let mut losing_cards = valid_cards;
-            losing_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
-            let best_card = losing_cards[0];
-            let reason = "Мы никак не можем выиграть эту взятку. Скидываем самую слабую или ненужную карту, чтобы минимизировать потери.".to_string();
-            return (Some(best_card), reason);
+            let mut winning_cards: Vec<Card> = valid_cards.iter().filter(|c| c.power(lead_card.suit, trump) > winning_power).copied().collect();
+
+            if !winning_cards.is_empty() {
+                winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
+                let best_card = winning_cards[0];
+                let reason = if best_card.rank == Rank::Jack || best_card.suit == trump {
+                    "Эту взятку перебить можно только козырем! Кладем его, чтобы забрать очки.".to_string()
+                } else {
+                    "У нас есть подходящая карта, чтобы забрать взятку! Используем её экономно.".to_string()
+                };
+                return (Some(best_card), reason);
+            } else {
+                let mut losing_cards = valid_cards;
+                losing_cards.sort_by_key(|c| (c.power(lead_card.suit, trump), c.points()));
+                let best_card = losing_cards[0];
+                let reason = "Мы никак не можем выиграть эту взятку. Скидываем самую слабую и ненужную карту, чтобы минимизировать потери.".to_string();
+                return (Some(best_card), reason);
+            }
         }
     }
 }
