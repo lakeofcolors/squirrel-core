@@ -14,7 +14,7 @@ pub fn determine_bot_move(state: &GameState, player: PlayerPosition, difficulty:
     }
     
     match difficulty {
-        BotDifficulty::Medium => {
+        BotDifficulty::Medium | BotDifficulty::Tutorial => {
             // Pick a random valid card
             let mut rng = rand::thread_rng();
             *valid_cards.choose(&mut rng).expect("No valid cards found for bot")
@@ -116,4 +116,53 @@ fn get_valid_cards(state: &GameState, player: PlayerPosition, hand: &Vec<Card>) 
 
         true
     }).copied().collect()
+}
+
+pub fn analyze_and_hint(state: &GameState, player: PlayerPosition) -> (Option<Card>, String) {
+    let hand = state.hands.get(&player).expect("Bot hand not found");
+    if hand.is_empty() {
+        return (None, "Ожидайте хода...".to_string());
+    }
+
+    let mut valid_cards = get_valid_cards(state, player, hand);
+    if valid_cards.is_empty() {
+        valid_cards = hand.clone();
+    }
+
+    if state.current_trick.is_empty() {
+        let trump = state.trump;
+        let best_card = valid_cards.into_iter().max_by_key(|c| c.power(c.suit, trump)).unwrap();
+        let reason = if best_card.rank == Rank::Jack {
+            "Вы ходите первым. Выгодно зайти с козырного Вальта, чтобы выбить козыри противников и гарантированно начать взятку.".to_string()
+        } else if best_card.suit == trump {
+            "Вы ходите первым. Пойдем с козыря, чтобы заставить оппонентов сбросить свои сильные карты.".to_string()
+        } else {
+            "Заходим с сильной карты, чтобы попытаться забрать первую взятку без использования козырей.".to_string()
+        };
+        return (Some(best_card), reason);
+    } else {
+        let lead_card = state.current_trick[0].1;
+        let trump = state.trump;
+        let current_winner = state.current_trick.iter().max_by_key(|(_, c)| c.power(lead_card.suit, trump)).unwrap().1;
+        let winning_power = current_winner.power(lead_card.suit, trump);
+
+        let mut winning_cards: Vec<Card> = valid_cards.iter().filter(|c| c.power(lead_card.suit, trump) > winning_power).copied().collect();
+
+        if !winning_cards.is_empty() {
+            winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
+            let best_card = winning_cards[0];
+            let reason = if best_card.rank == Rank::Jack || best_card.suit == trump {
+                "Эту взятку перебить можно только козырем! Кладем его, чтобы забрать очки.".to_string()
+            } else {
+                "У нас есть подходящая карта, чтобы забрать взятку! Используем её экономно.".to_string()
+            };
+            return (Some(best_card), reason);
+        } else {
+            let mut losing_cards = valid_cards;
+            losing_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
+            let best_card = losing_cards[0];
+            let reason = "Мы никак не можем выиграть эту взятку. Скидываем самую слабую или ненужную карту, чтобы минимизировать потери.".to_string();
+            return (Some(best_card), reason);
+        }
+    }
 }

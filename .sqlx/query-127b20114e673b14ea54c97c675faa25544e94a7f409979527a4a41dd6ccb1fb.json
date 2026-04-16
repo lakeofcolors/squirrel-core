@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE friend_requests SET status = 'accepted', responded_at = NOW() \n             WHERE (from_telegram_id = $1 AND to_telegram_id = $2) \n                OR (from_telegram_id = $2 AND to_telegram_id = $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "127b20114e673b14ea54c97c675faa25544e94a7f409979527a4a41dd6ccb1fb"
+}

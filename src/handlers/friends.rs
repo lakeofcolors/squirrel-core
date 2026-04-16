@@ -155,15 +155,47 @@ pub async fn consume_invite(
 
     let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
-    let _ = sqlx::query!(
+    let inviter_exists = sqlx::query!("SELECT 1 as x FROM users WHERE telegram_id = $1", inviter_id)
+        .fetch_optional(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+
+    if inviter_exists.is_none() {
+        return Err((StatusCode::NOT_FOUND, "Inviter not found".into()));
+    }
+
+    let res = sqlx::query!(
         "INSERT INTO user_friends (user_telegram_id, friend_telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
         my_id, inviter_id
-    ).execute(&mut *tx).await;
+    ).execute(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     let _ = sqlx::query!(
         "INSERT INTO user_friends (user_telegram_id, friend_telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
         inviter_id, my_id
-    ).execute(&mut *tx).await;
+    ).execute(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+
+    if res.rows_affected() > 0 {
+        let _ = sqlx::query!(
+            "UPDATE friend_requests SET status = 'accepted', responded_at = NOW() 
+             WHERE (from_telegram_id = $1 AND to_telegram_id = $2) 
+                OR (from_telegram_id = $2 AND to_telegram_id = $1)",
+            my_id, inviter_id
+        ).execute(&mut *tx).await;
+
+        let _ = sqlx::query(
+            "UPDATE user_quest_progress 
+             SET current_amount = current_amount + 1 
+             WHERE telegram_id = ANY($1) 
+             AND is_completed = FALSE 
+             AND quest_id IN (SELECT id FROM event_quests WHERE quest_type = 'add_friend' AND event_id IN (SELECT id FROM events WHERE is_active = TRUE AND start_time <= NOW() AND end_time >= NOW()))"
+        ).bind(&vec![my_id, inviter_id]).execute(&mut *tx).await;
+
+        let _ = sqlx::query(
+            "UPDATE user_quest_progress 
+             SET is_completed = TRUE 
+             WHERE telegram_id = ANY($1) 
+             AND is_completed = FALSE 
+             AND current_amount >= (SELECT target_amount FROM event_quests WHERE id = user_quest_progress.quest_id)"
+        ).bind(&vec![my_id, inviter_id]).execute(&mut *tx).await;
+    }
 
     tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 

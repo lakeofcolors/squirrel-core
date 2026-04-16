@@ -1062,6 +1062,16 @@ fn start_room_actor(
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                             let _ = tx_clone.send(RoomActorCommand::PlayCard { player: bot_id_val, card: best_card, is_bot_move: true });
                         });
+                    } else if !meta.is_bot && !meta.is_ghost && !state.paused {
+                        let is_tutorial = players.iter().any(|p| p.is_bot && p.bot_difficulty == Some(crate::utils::schemas::BotDifficulty::Tutorial));
+                        if is_tutorial {
+                            let (card, reason) = crate::core::bot::analyze_and_hint(state, current_turn);
+                            let pool = app_ctx.connection_pool().clone();
+                            let bot_id_val = *bot_id;
+                            tokio::spawn(async move {
+                                let _ = pool.send_to(&bot_id_val, crate::utils::schemas::WSEvent::GameHint { card, reason }).await;
+                            });
+                        }
                     }
                 }
             }

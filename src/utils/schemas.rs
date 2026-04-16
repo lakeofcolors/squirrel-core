@@ -38,6 +38,7 @@ pub struct PlayerMeta{
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum BotDifficulty {
+    Tutorial,
     Medium,
     Hard,
 }
@@ -666,6 +667,7 @@ pub enum WSEvent {
     ReadyCheckUpdate { ready_players: Vec<PlayerId> },
     Taunt { position: PlayerPosition, taunt_id: String },
     SponsorAction { from_id: i64, to_id: i64 },
+    GameHint { card: Option<Card>, reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
