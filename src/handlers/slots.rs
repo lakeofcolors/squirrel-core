@@ -26,6 +26,7 @@ pub struct SpinSlotsResponse {
     pub new_balance: i64,
     pub free_spins_awarded: i32,
     pub free_spins_remaining: i32,
+    pub current_jackpot: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -73,6 +74,17 @@ pub async fn spin_slots(
 
     let mut is_free_spin = false;
 
+    // Fetch Jackpot
+    let jackpot_row = match sqlx::query!(
+        "SELECT value FROM global_state WHERE key = 'slots_jackpot' FOR UPDATE"
+    )
+    .fetch_one(&mut *tx)
+    .await {
+        Ok(r) => r,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get jackpot").into_response(),
+    };
+    let mut current_jackpot = jackpot_row.value;
+
     if current_free_spins > 0 {
         is_free_spin = true;
         // Deduct free spin
@@ -109,6 +121,12 @@ pub async fn spin_slots(
         .await.is_err() {
             return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save tx").into_response();
         }
+    }
+
+    // Update jackpot pool (5% of bet goes to jackpot if not free spin)
+    if !is_free_spin {
+        let jackpot_increment = (req.bet_amount as f64 * 0.05).ceil() as i64;
+        current_jackpot += jackpot_increment.max(1);
     }
 
     // RNG
@@ -272,6 +290,21 @@ pub async fn spin_slots(
         (symbols_matrix, win_cells, win_type, total_win_amount, free_spins_awarded)
     };
 
+    if win_type == "jackpot" {
+        win_amount = current_jackpot;
+        current_jackpot = 100000; // Reset jackpot
+    }
+
+    // Update jackpot in DB
+    if sqlx::query!(
+        "UPDATE global_state SET value = $1 WHERE key = 'slots_jackpot'",
+        current_jackpot
+    )
+    .execute(&mut *tx)
+    .await.is_err() {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update jackpot").into_response();
+    }
+
     let mut cosmetic_reward = None;
 
     if win_type == "cosmetic" {
@@ -381,5 +414,6 @@ pub async fn spin_slots(
         new_balance,
         free_spins_awarded,
         free_spins_remaining: final_free_spins,
+        current_jackpot,
     }).into_response()
 }
