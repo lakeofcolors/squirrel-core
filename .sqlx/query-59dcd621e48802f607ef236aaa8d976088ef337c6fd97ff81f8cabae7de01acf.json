@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO wallet_transactions (telegram_id, amount, currency, tx_type, metadata, created_at) VALUES ($1, $2, 'nuts', 'spend', 'slots_bet', NOW())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "59dcd621e48802f607ef236aaa8d976088ef337c6fd97ff81f8cabae7de01acf"
+}

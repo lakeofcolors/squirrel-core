@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_achievements (telegram_id, achievement_key) VALUES ($1, 'first_win') ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b6a417bb7ab19fb914c790b4699c92ff1de5c371f46ca81a004445ac45eca12"
+}

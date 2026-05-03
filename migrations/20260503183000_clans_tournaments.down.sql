@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS tournaments;
+DROP TABLE IF EXISTS clan_members;
+DROP TABLE IF EXISTS clans;
+ALTER TABLE users DROP COLUMN IF EXISTS tournament_coins;

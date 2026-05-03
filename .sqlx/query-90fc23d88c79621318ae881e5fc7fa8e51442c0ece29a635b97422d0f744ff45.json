@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, round, match_index, clan1_id, clan2_id, winner_id, room_id FROM tournament_matches WHERE tournament_id = $1 ORDER BY round ASC, match_index ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "round",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "match_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "clan1_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "clan2_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "winner_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "room_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "90fc23d88c79621318ae881e5fc7fa8e51442c0ece29a635b97422d0f744ff45"
+}

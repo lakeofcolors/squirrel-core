@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT username, rating, photo_url, free_coins, xp, uei.equipped_deck_id as equipped_deck, uei.equipped_background_id as equipped_background  FROM users u\n         LEFT JOIN user_equipped_items uei\n         ON uei.telegram_id = u.telegram_id\n         WHERE u.telegram_id = $1",
+  "query": "SELECT username, rating, photo_url, free_coins, xp, tournament_coins, uei.equipped_deck_id as equipped_deck, uei.equipped_background_id as equipped_background  FROM users u\n         LEFT JOIN user_equipped_items uei\n         ON uei.telegram_id = u.telegram_id\n         WHERE u.telegram_id = $1",
   "describe": {
     "columns": [
       {
@@ -30,11 +30,16 @@
       },
       {
         "ordinal": 5,
+        "name": "tournament_coins",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
         "name": "equipped_deck",
         "type_info": "Text"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "equipped_background",
         "type_info": "Text"
       }
@@ -50,9 +55,10 @@
       true,
       false,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "5ed7bcdb0422dab297a64344ce3fc9af862a2ee9138f8aa7c81ff9d1694c7895"
+  "hash": "0928ba16dd0ca93044abb696d26741378867f89a9b89dccf319e03cb74ccd417"
 }

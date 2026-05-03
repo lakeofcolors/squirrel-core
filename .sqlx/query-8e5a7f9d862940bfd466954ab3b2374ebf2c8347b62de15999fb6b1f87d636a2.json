@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tournament_squads (registration_id, telegram_id, is_substitute) VALUES ($1, $2, false)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e5a7f9d862940bfd466954ab3b2374ebf2c8347b62de15999fb6b1f87d636a2"
+}

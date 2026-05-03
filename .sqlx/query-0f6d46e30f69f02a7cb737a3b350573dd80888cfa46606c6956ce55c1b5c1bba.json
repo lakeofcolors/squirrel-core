@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, item_type, item_key, title\n            FROM store_cosmetics\n            WHERE is_active = true\n              AND item_type IN ('deck', 'background', 'taunt')\n              AND item_key NOT IN (\n                  SELECT item_id FROM user_inventory WHERE telegram_id = $1\n              )\n            ORDER BY RANDOM()\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "item_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "item_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0f6d46e30f69f02a7cb737a3b350573dd80888cfa46606c6956ce55c1b5c1bba"
+}
