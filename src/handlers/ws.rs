@@ -116,11 +116,12 @@ async fn handle_incoming(
             }
         }
 
-        WSIncomingMessage::InviteFriend { room_id, friend_id } => {
+        WSIncomingMessage::InviteFriend { room_id, friend_id, target_bot_id } => {
             let _ = app_ctx.room_manager.send(RoomManagerCommand::InvitePlayer {
                 room_id,
                 inviter_id: player_id,
                 target_id: friend_id,
+                target_bot_id,
             });
         }
 
@@ -200,7 +201,7 @@ async fn handle_incoming(
             );
         }
 
-        WSIncomingMessage::JoinRoom { room_id, password } => {
+        WSIncomingMessage::JoinRoom { room_id, password, target_bot_id } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
@@ -214,6 +215,7 @@ async fn handle_incoming(
                     player: player_id,
                     room_id,
                     password,
+                    target_bot_id,
                 },
             );
         }

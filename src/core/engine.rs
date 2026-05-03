@@ -393,7 +393,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         ).await;
                     }
                 }
-                RoomManagerCommand::InvitePlayer { room_id, inviter_id, target_id } => {
+                RoomManagerCommand::InvitePlayer { room_id, inviter_id, target_id, target_bot_id } => {
                     if let Some(room) = rooms.get_mut(&room_id) {
                         if room.meta.players.iter().any(|p| p.id == inviter_id) {
                             if !room.invited_players.contains(&target_id) {
@@ -404,17 +404,27 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                 app_ctx.connection_pool().send_to(&target_id, WSEvent::GameInvite {
                                     room_id: room_id.clone(),
                                     room_name: Some(room.meta.name.clone()),
-                                    from: pm
+                                    from: pm,
+                                    target_bot_id,
                                 }).await;
                             }
                         }
                     }
                 }
-                RoomManagerCommand::JoinRoom { player, room_id, password } => {
+                RoomManagerCommand::JoinRoom { player, room_id, password, target_bot_id } => {
                     if let Some(room) = rooms.get_mut(&room_id) {
                         let is_bot_match = room.meta.kind == RoomKind::BotMatch;
                         let bot_to_replace = if is_bot_match {
-                            room.meta.players.iter().position(|p| p.is_bot && p.id < 0)
+                            let mut target_idx = None;
+                            if let Some(tid) = target_bot_id {
+                                if let Some(idx) = room.meta.players.iter().position(|p| p.id == tid && p.is_bot && p.id < 0) {
+                                    target_idx = Some(idx);
+                                }
+                            }
+                            if target_idx.is_none() {
+                                target_idx = room.meta.players.iter().position(|p| p.is_bot && p.id < 0);
+                            }
+                            target_idx
                         } else {
                             None
                         };
@@ -694,7 +704,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                 RoomManagerCommand::AcceptJoinRequest { host, room_id, target_id } => {
                     if let Some(room) = rooms.get(&room_id) {
                         if room.meta.players.iter().any(|p| p.id == host && !p.is_bot && !p.is_ghost) {
-                            let _ = manager_tx.send(RoomManagerCommand::JoinRoom { player: target_id, room_id: room_id.clone(), password: None });
+                            let _ = manager_tx.send(RoomManagerCommand::JoinRoom { player: target_id, room_id: room_id.clone(), password: None, target_bot_id: None });
                         }
                     }
                 }
