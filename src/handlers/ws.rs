@@ -328,6 +328,25 @@ async fn handle_incoming(
                 },
             );
         }
+
+        WSIncomingMessage::RequestToJoin { room_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::RequestToJoin {
+                    player: player_id,
+                    room_id,
+                }
+            );
+        }
+
+        WSIncomingMessage::AcceptJoinRequest { room_id, target_id } => {
+            let _ = app_ctx.room_manager.send(
+                RoomManagerCommand::AcceptJoinRequest {
+                    host: player_id,
+                    room_id,
+                    target_id,
+                }
+            );
+        }
     }
 }
 

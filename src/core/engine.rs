@@ -412,7 +412,14 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                 }
                 RoomManagerCommand::JoinRoom { player, room_id, password } => {
                     if let Some(room) = rooms.get_mut(&room_id) {
-                        if room.meta.players.len() < 4 {
+                        let is_bot_match = room.meta.kind == RoomKind::BotMatch;
+                        let bot_to_replace = if is_bot_match {
+                            room.meta.players.iter().position(|p| p.is_bot && p.id < 0)
+                        } else {
+                            None
+                        };
+
+                        if room.meta.players.len() < 4 || bot_to_replace.is_some() {
                             if room.meta.players.iter().any(|p| p.id == player){
                                 continue;
                             } else {
@@ -450,9 +457,17 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                 }
 
                                 if let Some(session) = app_ctx.connection_pool().get(&player) {
-                                    room.meta.players.push(session.player_meta.clone());
-                                    if matches!(room.meta.kind, RoomKind::Private | RoomKind::Open) {
-                                        let _ = session.mark_as_in_lobby(room_id.clone()).await;
+                                    if let Some(bot_idx) = bot_to_replace {
+                                        let old_bot_id = room.meta.players[bot_idx].id;
+                                        room.meta.players[bot_idx] = session.player_meta.clone();
+                                        if let Some(actor) = &room.actor {
+                                            let _ = actor.send(RoomActorCommand::ReplaceBot { old_id: old_bot_id, new_player: session.player_meta.clone() });
+                                        }
+                                    } else {
+                                        room.meta.players.push(session.player_meta.clone());
+                                        if matches!(room.meta.kind, RoomKind::Private | RoomKind::Open) {
+                                            let _ = session.mark_as_in_lobby(room_id.clone()).await;
+                                        }
                                     }
                                 } else {
                                     warn!("JoinRoom failed: player {} not in pool", player);
@@ -467,7 +482,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                 },
                             ).await;
 
-                            if room.meta.players.len() == 4 {
+                            if room.meta.players.len() == 4 && room.actor.is_none() {
                                 let room_actor = start_room_actor(
                                     room_id.clone(),
                                     room.meta.players.clone(),
@@ -657,6 +672,29 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                     if let Some(room) = rooms.get(&room_id) {
                         if let Some(actor) = &room.actor {
                             let _ = actor.send(RoomActorCommand::Taunt { player, taunt_id });
+                        }
+                    }
+                }
+                RoomManagerCommand::RequestToJoin { player, room_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if room.meta.kind == RoomKind::BotMatch {
+                            if let Some(host) = room.meta.players.iter().find(|p| !p.is_bot && !p.is_ghost) {
+                                if let Some(session) = app_ctx.connection_pool().get(&player) {
+                                    let _ = app_ctx.connection_pool().send_to(&host.id, WSEvent::JoinRequest {
+                                        room_id: room_id.clone(),
+                                        from: session.player_meta.clone(),
+                                    }).await;
+                                }
+                            }
+                        } else {
+                            app_ctx.connection_pool().send_to(&player, WSEvent::Error { detail: "Запрос можно отправить только в игре с ботами".to_string() }).await;
+                        }
+                    }
+                }
+                RoomManagerCommand::AcceptJoinRequest { host, room_id, target_id } => {
+                    if let Some(room) = rooms.get(&room_id) {
+                        if room.meta.players.iter().any(|p| p.id == host && !p.is_bot && !p.is_ghost) {
+                            let _ = manager_tx.send(RoomManagerCommand::JoinRoom { player: target_id, room_id: room_id.clone(), password: None });
                         }
                     }
                 }
@@ -919,7 +957,7 @@ fn start_room_actor(
     }
 
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let player_ids: Vec<PlayerId> = players.iter().map(|meta| meta.id).collect();
+    let mut player_ids: Vec<PlayerId> = players.iter().map(|meta| meta.id).collect();
 
     let tx_actor = tx.clone();
     tokio::spawn(async move {
@@ -1212,6 +1250,20 @@ fn start_room_actor(
                             trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
                         }
                         Err(e) => {
+                            if is_bot_move && !state.paused {
+                                warn!("Bot {} failed to play card {:?} due to {}, forcing random valid card!", player, card, e);
+                                if let Some(hand) = state.hands.get(&player_position) {
+                                    let mut valid = crate::core::bot::get_valid_cards(&state, *player_position, hand);
+                                    if valid.is_empty() { valid = hand.clone(); }
+                                    if let Some(&first) = valid.first() {
+                                        let tx_clone = tx_actor.clone();
+                                        tokio::spawn(async move {
+                                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                            let _ = tx_clone.send(RoomActorCommand::PlayCard { player, card: first, is_bot_move: true });
+                                        });
+                                    }
+                                }
+                            }
                             app_ctx.connection_pool().send_to(
                                 &player.clone(),
                                 WSEvent::Error { detail: e.to_string() }
@@ -1424,6 +1476,39 @@ fn start_room_actor(
                                 taunt_id,
                             }
                         ).await;
+                    }
+                }
+                RoomActorCommand::ReplaceBot { old_id, new_player } => {
+                    if let Some(p) = players.iter_mut().find(|p| p.id == old_id) {
+                        *p = new_player.clone();
+                    }
+                    if let Some(pos) = player_positions.get_by_left(&old_id).copied() {
+                        player_positions.remove_by_left(&old_id);
+                        player_positions.insert(new_player.id, pos);
+                        
+                        if let Some(session) = app_ctx.connection_pool().get(&new_player.id) {
+                            session.mark_as_in_game(room_id.clone(), pos).await;
+                        }
+                        
+                        if let Some(idx) = player_ids.iter().position(|&x| x == old_id) {
+                            player_ids[idx] = new_player.id;
+                        }
+                        
+                        let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
+                        let mut all_targets = player_ids.clone();
+                        all_targets.extend(spectators.iter());
+                        let _ = app_ctx.connection_pool().broadcast(all_targets.clone(), WSEvent::GameSnapshot(snapshot)).await;
+                        
+                        if let Some(hand) = state.hands.get(&pos) {
+                            let _ = app_ctx.connection_pool().send_to(
+                                &new_player.id,
+                                WSEvent::YourHand { cards: hand.clone() }
+                            ).await;
+                        }
+                        
+                        if state.current_turn == pos && !state.paused {
+                            trigger_bot_turn(state.current_turn, &state, &players, &player_positions, tx_actor.clone());
+                        }
                     }
                 }
                 RoomActorCommand::PlayerReady { .. } | RoomActorCommand::ReadyTimeout => {}

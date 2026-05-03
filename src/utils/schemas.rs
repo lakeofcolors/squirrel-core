@@ -126,6 +126,8 @@ pub enum RoomManagerCommand {
     PlayerReady { player: PlayerId, room_id: RoomId },
     Taunt { player: PlayerId, room_id: RoomId, taunt_id: String },
     SponsorPlayer { player: PlayerId, room_id: RoomId, target_id: i64 },
+    RequestToJoin { player: PlayerId, room_id: RoomId },
+    AcceptJoinRequest { host: PlayerId, room_id: RoomId, target_id: PlayerId },
 }
 
 #[derive(Debug)]
@@ -142,6 +144,7 @@ pub enum RoomActorCommand{
     TurnTimeout { player: PlayerId, turn: u64 },
     Taunt { player: PlayerId, taunt_id: String },
     SponsorPlayer { player: PlayerId, target_id: i64 },
+    ReplaceBot { old_id: PlayerId, new_player: PlayerMeta },
 }
 
 
@@ -668,6 +671,7 @@ pub enum WSEvent {
     Taunt { position: PlayerPosition, taunt_id: String },
     SponsorAction { from_id: i64, to_id: i64 },
     GameHint { card: Option<Card>, reason: String },
+    JoinRequest { room_id: RoomId, from: PlayerMeta },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -728,4 +732,6 @@ pub enum WSIncomingMessage {
     PlayCard{room_id: RoomId, rank: String, suit: String},
     SponsorPlayer { room_id: RoomId, target_id: i64 },
     Taunt{room_id: RoomId, taunt_id: String},
+    RequestToJoin { room_id: RoomId },
+    AcceptJoinRequest { room_id: RoomId, target_id: i64 },
 }

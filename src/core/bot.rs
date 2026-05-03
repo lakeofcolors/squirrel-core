@@ -90,7 +90,7 @@ pub fn determine_bot_move(state: &GameState, player: PlayerPosition, difficulty:
     }
 }
 
-fn get_valid_cards(state: &GameState, player: PlayerPosition, hand: &Vec<Card>) -> Vec<Card> {
+pub fn get_valid_cards(state: &GameState, player: PlayerPosition, hand: &Vec<Card>) -> Vec<Card> {
     if state.current_trick.is_empty() {
         // Can lead with anything, except Ace restriction if suits not played
         return hand.iter().filter(|&&card| {
