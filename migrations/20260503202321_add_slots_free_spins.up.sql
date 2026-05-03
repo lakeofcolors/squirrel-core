@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN slots_free_spins INT NOT NULL DEFAULT 0;

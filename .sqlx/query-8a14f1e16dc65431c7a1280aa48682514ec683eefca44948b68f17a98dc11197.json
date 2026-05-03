@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT free_coins::BIGINT as nuts, slots_free_spins FROM users WHERE telegram_id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nuts",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "slots_free_spins",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "8a14f1e16dc65431c7a1280aa48682514ec683eefca44948b68f17a98dc11197"
+}

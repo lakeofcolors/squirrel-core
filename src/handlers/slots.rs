@@ -24,6 +24,8 @@ pub struct SpinSlotsResponse {
     pub win_amount: i64,
     pub cosmetic_item: Option<CosmeticReward>,
     pub new_balance: i64,
+    pub free_spins_awarded: i32,
+    pub free_spins_remaining: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,9 +57,9 @@ pub async fn spin_slots(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to begin transaction").into_response(),
     };
 
-    // Check balance
+    // Check balance and free spins
     let user_row = match sqlx::query!(
-        "SELECT free_coins::BIGINT as nuts FROM users WHERE telegram_id = $1 FOR UPDATE",
+        "SELECT free_coins::BIGINT as nuts, slots_free_spins FROM users WHERE telegram_id = $1 FOR UPDATE",
         telegram_id
     )
     .fetch_one(&mut *tx)
@@ -67,34 +69,50 @@ pub async fn spin_slots(
     };
 
     let current_nuts = user_row.nuts.unwrap_or(0);
+    let current_free_spins = user_row.slots_free_spins;
 
-    if current_nuts < req.bet_amount {
-        return (StatusCode::BAD_REQUEST, "Not enough nuts").into_response();
-    }
+    let mut is_free_spin = false;
 
-    // Deduct bet
-    if sqlx::query!(
-        "UPDATE users SET free_coins = free_coins - $1 WHERE telegram_id = $2",
-        req.bet_amount as i32,
-        telegram_id
-    )
-    .execute(&mut *tx)
-    .await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deduct bet").into_response();
-    }
+    if current_free_spins > 0 {
+        is_free_spin = true;
+        // Deduct free spin
+        if sqlx::query!(
+            "UPDATE users SET slots_free_spins = slots_free_spins - 1 WHERE telegram_id = $1",
+            telegram_id
+        )
+        .execute(&mut *tx)
+        .await.is_err() {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deduct free spin").into_response();
+        }
+    } else {
+        if current_nuts < req.bet_amount {
+            return (StatusCode::BAD_REQUEST, "Not enough nuts").into_response();
+        }
 
-    if sqlx::query!(
-        "INSERT INTO wallet_transactions (telegram_id, amount, currency, tx_type, metadata, created_at) VALUES ($1, $2, 'nuts', 'spend', 'slots_bet', NOW())",
-        telegram_id,
-        -req.bet_amount
-    )
-    .execute(&mut *tx)
-    .await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save tx").into_response();
+        // Deduct bet
+        if sqlx::query!(
+            "UPDATE users SET free_coins = free_coins - $1 WHERE telegram_id = $2",
+            req.bet_amount as i32,
+            telegram_id
+        )
+        .execute(&mut *tx)
+        .await.is_err() {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deduct bet").into_response();
+        }
+
+        if sqlx::query!(
+            "INSERT INTO wallet_transactions (telegram_id, amount, currency, tx_type, metadata, created_at) VALUES ($1, $2, 'nuts', 'spend', 'slots_bet', NOW())",
+            telegram_id,
+            -req.bet_amount
+        )
+        .execute(&mut *tx)
+        .await.is_err() {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save tx").into_response();
+        }
     }
 
     // RNG
-    let (symbols_matrix, win_cells, mut win_type, mut win_amount) = {
+    let (symbols_matrix, win_cells, mut win_type, mut win_amount, free_spins_awarded) = {
         let mut rng = rand::thread_rng();
 
         let (rows, cols) = match req.bet_amount {
@@ -111,7 +129,9 @@ pub async fn spin_slots(
             ("🔔", 50,  2.0, 5.0, 10.0),
             ("💎", 20,  5.0, 15.0, 50.0),
             ("🃏", 10,  10.0, 30.0, 100.0),
-            ("💰", 5,   20.0, 100.0, 500.0), 
+            ("💰", 5,   20.0, 100.0, 500.0),
+            ("🐿️", 10,  0.0, 0.0, 0.0), // Scatter
+            ("🧨", 8,   0.0, 0.0, 0.0), // Multiplier
         ];
 
         let mut deck = Vec::new();
@@ -200,7 +220,7 @@ pub async fn spin_slots(
             }
 
             // Check the last sequence in the line
-            if current_len >= 3 {
+            if current_len >= 3 && current_sym != "🐿️" && current_sym != "🧨" {
                 let config = symbol_configs.iter().find(|c| c.0 == current_sym.as_str()).unwrap();
                 let multiplier = if current_len == 3 { config.2 } else if current_len == 4 { config.3 } else { config.4 };
                 
@@ -214,10 +234,42 @@ pub async fn spin_slots(
             }
         }
 
+        // Evaluate Scatters (Squirrels)
+        let mut scatter_count = 0;
+        let mut scatter_cells = Vec::new();
+        // Evaluate Multipliers (Bombs)
+        let mut bomb_multiplier = 1;
+        let mut bomb_cells = Vec::new();
+
+        for r in 0..rows {
+            for c in 0..cols {
+                if symbols_matrix[r][c] == "🐿️" {
+                    scatter_count += 1;
+                    scatter_cells.push((r, c));
+                }
+                if symbols_matrix[r][c] == "🧨" {
+                    bomb_multiplier += 1; // Each bomb adds to the multiplier
+                    bomb_cells.push((r, c));
+                }
+            }
+        }
+
+        let mut free_spins_awarded = 0;
+        if scatter_count >= 3 {
+            free_spins_awarded = 2; // Can scale with scatter_count
+            win_cells.extend(scatter_cells);
+            if win_type == "loss" { win_type = "free_spins".to_string(); }
+        }
+
+        if bomb_cells.len() > 0 && total_win_amount > 0 {
+            total_win_amount *= bomb_multiplier;
+            win_cells.extend(bomb_cells);
+        }
+
         win_cells.sort();
         win_cells.dedup();
 
-        (symbols_matrix, win_cells, win_type, total_win_amount)
+        (symbols_matrix, win_cells, win_type, total_win_amount, free_spins_awarded)
     };
 
     let mut cosmetic_reward = None;
@@ -291,20 +343,43 @@ pub async fn spin_slots(
         }
     }
 
-    let final_balance = current_nuts - req.bet_amount + win_amount;
-
-    if tx.commit().await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to commit transaction").into_response();
+    if free_spins_awarded > 0 {
+        if sqlx::query!(
+            "UPDATE users SET slots_free_spins = slots_free_spins + $1 WHERE telegram_id = $2",
+            free_spins_awarded,
+            telegram_id
+        )
+        .execute(&mut *tx)
+        .await.is_err() {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to award free spins").into_response();
+        }
     }
-    
-    info!("Player {} spun slots. Bet: {}, Result: {}, Won: {}", telegram_id, req.bet_amount, win_type, win_amount);
 
-    (StatusCode::OK, Json(SpinSlotsResponse {
+    if let Err(_) = tx.commit().await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to commit tx").into_response();
+    }
+
+    // Compute updated free spins remaining
+    let final_free_spins = if is_free_spin {
+        current_free_spins - 1 + free_spins_awarded
+    } else {
+        current_free_spins + free_spins_awarded
+    };
+
+    let new_balance = if is_free_spin {
+        current_nuts + win_amount
+    } else {
+        current_nuts - req.bet_amount + win_amount
+    };
+
+    Json(SpinSlotsResponse {
         symbols: symbols_matrix,
         win_cells,
         win_type,
         win_amount,
         cosmetic_item: cosmetic_reward,
-        new_balance: final_balance,
-    })).into_response()
+        new_balance,
+        free_spins_awarded,
+        free_spins_remaining: final_free_spins,
+    }).into_response()
 }
