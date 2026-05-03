@@ -46,7 +46,7 @@ pub async fn spin_slots(
 ) -> impl IntoResponse {
     let telegram_id = auth_user.telegram_id;
 
-    if req.bet_amount != 10 && req.bet_amount != 50 && req.bet_amount != 100 {
+    if req.bet_amount != 5 && req.bet_amount != 50 && req.bet_amount != 300 {
         return (StatusCode::BAD_REQUEST, "Invalid bet amount").into_response();
     }
 
