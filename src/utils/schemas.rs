@@ -55,6 +55,7 @@ pub enum RoomKind {
     Open,
     Queue,
     BotMatch,
+    TournamentMatch,
 }
 
 
@@ -102,6 +103,12 @@ pub enum RoomManagerCommand {
         player: PlayerId,
         difficulty: BotDifficulty,
         max_eyes: u16,
+    },
+    CreateTournamentRoom {
+        room_id: RoomId,
+        tournament_id: i32,
+        match_id: i32,
+        players: Vec<PlayerId>,
     },
     GhostBotTick,
     InjectBotToRoom { room_id: RoomId },

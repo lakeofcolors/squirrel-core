@@ -10,3 +10,5 @@ pub mod history;
 pub mod chests;
 pub mod daily;
 pub mod spin;
+pub mod clans;
+pub mod slots;

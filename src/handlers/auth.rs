@@ -35,6 +35,7 @@ pub struct MeResponse {
     pub rating: u64,
     pub xp: i32,
     pub nuts: u64,
+    pub tournament_coins: u64,
     pub equipped_deck: String,
     pub equipped_background: String,
 }
@@ -172,7 +173,7 @@ pub async fn me(
     let telegram_id: i64 = auth_user.telegram_id;
 
     let user = sqlx::query!(
-        "SELECT username, rating, photo_url, free_coins, xp, uei.equipped_deck_id as equipped_deck, uei.equipped_background_id as equipped_background  FROM users u
+        "SELECT username, rating, photo_url, free_coins, xp, tournament_coins, uei.equipped_deck_id as equipped_deck, uei.equipped_background_id as equipped_background  FROM users u
          LEFT JOIN user_equipped_items uei
          ON uei.telegram_id = u.telegram_id
          WHERE u.telegram_id = $1",
@@ -190,6 +191,7 @@ pub async fn me(
                 rating: record.rating as u64,
                 xp: record.xp,
                 nuts: record.free_coins as u64,
+                tournament_coins: record.tournament_coins as u64,
                 equipped_deck: record.equipped_deck.unwrap_or_else(|| "classic".into()),
                 equipped_background: record.equipped_background.unwrap_or_else(|| "neon".into()),
             };

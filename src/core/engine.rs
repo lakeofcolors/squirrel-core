@@ -122,6 +122,33 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                         room.actor = Some(room_actor);
                     }
                 }
+                RoomManagerCommand::CreateTournamentRoom { room_id, tournament_id, match_id, players } => {
+                    let room_meta = RoomMeta {
+                        id: room_id.clone(),
+                        name: format!("Матч #{}", match_id),
+                        key: QueueKey {
+                            stake: rust_decimal::Decimal::ZERO,
+                            currency: crate::utils::schemas::Currency::Virtual,
+                            league: crate::utils::schemas::League::Bronze,
+                        },
+                        players: Vec::new(),
+                        kind: RoomKind::TournamentMatch,
+                        max_eyes: 12,
+                    };
+
+                    rooms.insert(room_id.clone(), Room {
+                        actor: None,
+                        meta: room_meta.clone(),
+                        password_hash: None,
+                        created_at: Instant::now(),
+                        invited_players: players.clone(),
+                    });
+
+                    app_ctx.connection_pool().broadcast(
+                        room_subscribers.clone(),
+                        WSEvent::RoomCreated { room: room_meta }
+                    ).await;
+                }
                 RoomManagerCommand::CreateBotRoom { key, player, difficulty, max_eyes } => {
                     let room_id = Uuid::new_v4().to_string();
                     let stake_value = key.stake.to_i32().unwrap_or(0);
@@ -247,11 +274,16 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     continue;
                                 }
 
+                                let stakes = vec![10, 50, 100, 500];
+                                use rand::Rng;
+                                let stake_idx = rand::thread_rng().gen_range(0..stakes.len());
+                                let stake_val = stakes[stake_idx];
+
                                 let room_meta = RoomMeta {
                                     id: room_id.clone(),
                                     name: Uuid::new_v4().to_string()[..8].to_string(), // Fake names
                                     key: QueueKey {
-                                        stake: rust_decimal::Decimal::new(100, 0),
+                                        stake: rust_decimal::Decimal::new(stake_val as i64, 0),
                                         currency: crate::utils::schemas::Currency::Virtual,
                                         league: crate::utils::schemas::League::Bronze,
                                     },
@@ -278,7 +310,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                                     room_id.clone(),
                                     players_meta,
                                     manager_tx.clone(),
-                                    100,
+                                    stake_val,
                                     12
                                 );
                                 
@@ -433,6 +465,14 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand>{
                             if room.meta.players.iter().any(|p| p.id == player){
                                 continue;
                             } else {
+                                if room.meta.kind == RoomKind::TournamentMatch && !room.invited_players.contains(&player) {
+                                    app_ctx.connection_pool().send_to(
+                                        &player,
+                                        WSEvent::Error { detail: "Вы не состоите в заявке на этот матч".to_string() }
+                                    ).await;
+                                    continue;
+                                }
+
                                 if let Some(room_pwd) = &room.password_hash {
                                     if !room.invited_players.contains(&player) && password != Some(room_pwd.clone()) {
                                         app_ctx.connection_pool().send_to(
@@ -798,7 +838,7 @@ async fn process_game_rewards(
             let result_str = if is_leaver { "abandoned" } else { "win" };
 
             let rating_delta = if is_bot_match { 0 } else if is_leaver { penalty_rating } else { compensation_rating };
-            let nuts_delta = if is_bot_match { 0 } else if is_leaver { penalty_nuts } else { compensation_nuts };
+            let nuts_delta = if is_bot_match { 0 } else if is_leaver { penalty_nuts } else { compensation_nuts + 20 };
             
             update_player_rewards(&mut db_tx, player.id, rating_delta, nuts_delta, !is_leaver, is_leaver, is_bot_match).await;
 
@@ -837,7 +877,13 @@ async fn process_game_rewards(
                          || (winner == Team::Uzi && team_uzi.contains(&player.id));
             
             let rating_delta = if is_bot_match { 0 } else if is_winner { win_rating } else { lose_rating };
-            let nuts_delta = if is_bot_match { 0 } else if is_winner { win_nuts } else { lose_nuts };
+            let nuts_delta = if is_bot_match { 
+                if is_winner { 10 } else { 0 }
+            } else if is_winner { 
+                win_nuts + 20 
+            } else { 
+                lose_nuts 
+            };
             
             update_player_rewards(&mut db_tx, player.id, rating_delta, nuts_delta, is_winner, false, is_bot_match).await;
 
@@ -909,6 +955,13 @@ async fn update_player_rewards(
     } else {
         if is_winner { vec!["play_ranked", "win_ranked"] } else { vec!["play_ranked"] }
     };
+
+    if is_winner {
+        let _ = sqlx::query!(
+            "INSERT INTO user_achievements (telegram_id, achievement_key) VALUES ($1, 'first_win') ON CONFLICT DO NOTHING",
+            player_id
+        ).execute(&mut **db_tx).await;
+    }
 
     if !quest_type.is_empty() {
         let _ = sqlx::query(
@@ -1193,6 +1246,27 @@ fn start_room_actor(
                                     all_targets.clone(),
                                     WSEvent::TrickWon{position: winner, team: winner.team()}
                                 ).await;
+
+                                // throw taunt if bot won
+                                if let Some(winner_id) = player_positions.get_by_right(&winner) {
+                                    if let Some(p) = players.iter().find(|p| &p.id == winner_id) {
+                                        if p.is_bot || p.is_ghost {
+                                            use rand::Rng;
+                                            let mut rng = rand::thread_rng();
+                                            if rng.gen_bool(0.25) {
+                                                let taunts = vec!["🐿", "😡", "😂", "🔥", "😎"];
+                                                let taunt = taunts[rng.gen_range(0..taunts.len())].to_string();
+                                                let tx_clone = tx_actor.clone();
+                                                let wid = *winner_id;
+                                                tokio::spawn(async move {
+                                                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                                                    let _ = tx_clone.send(RoomActorCommand::Taunt { player: wid, taunt_id: taunt });
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // если раунд закончен
                                 if state.hands.values().all(|h| h.is_empty()) {
                                     let _ = state.update_eye_after_round();

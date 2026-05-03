@@ -12,11 +12,13 @@ use crate::handlers::auth::{telegram_login, me, refresh_token};
 use crate::handlers::ws::ws_handler;
 use crate::handlers::store::{telegram_update_webhook, create_invoice, buy_item_for_nuts, start_rewarded_session};
 use crate::handlers::rating::get_leaderboard;
-use crate::handlers::profile::get_profile;
+use crate::handlers::profile::{get_profile, get_public_profile};
 use crate::handlers::history::get_match_replay;
 use crate::handlers::friends::{get_friends, consume_invite, send_request, get_requests, accept_request, decline_request, search_users};
 use crate::handlers::chests::{get_chests, open_chest, buy_chest};
 use crate::handlers::daily::{get_daily_status, claim_daily_reward};
+use crate::handlers::clans::{create_clan, get_clans, get_clan_details, join_clan, leave_clan, get_tournaments, get_tournament_details, register_for_tournament};
+use crate::handlers::slots::spin_slots;
 use crate::utils::db::pg_pool;
 pub mod handlers;
 pub mod utils;
@@ -27,6 +29,7 @@ use tower_http::cors::{CorsLayer, Any};
 use axum::http::{Method, HeaderName};
 use tower_http::trace::TraceLayer;
 use core::engine::start_queue_manager;
+use core::tournaments::start_tournament_manager;
 
 #[tokio::main]
 async fn main() {
@@ -41,6 +44,8 @@ async fn main() {
     let db_pool = crate::utils::db::pg_pool()
         .await
         .expect("Failed to create PgPool");
+
+    start_tournament_manager(db_pool.clone(), room_manager_writter.clone());
 
     let app_ctx = Arc::new(
         AppContext::new(
@@ -68,6 +73,7 @@ async fn main() {
         .route("/v1/store/buy", post(buy_item_for_nuts))
         .route("/v1/rating", get(get_leaderboard))
         .route("/v1/profile", get(get_profile))
+        .route("/v1/profile/:id", get(get_public_profile))
         .route("/v1/friends", get(get_friends))
         .route("/v1/users/search", get(search_users))
         .route("/v1/friends/invite/consume", post(consume_invite))
@@ -86,6 +92,14 @@ async fn main() {
         .route("/v1/daily_reward/claim", post(claim_daily_reward))
         .route("/v1/spin", get(crate::handlers::spin::get_spin_info))
         .route("/v1/spin/draw", post(crate::handlers::spin::draw_spin))
+        .route("/v1/slots/spin", post(spin_slots))
+        .route("/v1/clans", post(create_clan).get(get_clans))
+        .route("/v1/clans/:id", get(get_clan_details))
+        .route("/v1/clans/:id/join", post(join_clan))
+        .route("/v1/clans/leave", post(leave_clan))
+        .route("/v1/tournaments", get(get_tournaments))
+        .route("/v1/tournaments/:id", get(get_tournament_details))
+        .route("/v1/tournaments/:id/register", post(register_for_tournament))
         .route("/telegram/webhook", post(telegram_update_webhook))
         .layer(cors)
         .layer(Extension(app_ctx))
