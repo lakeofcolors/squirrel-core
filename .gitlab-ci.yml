@@ -33,10 +33,8 @@ stages:
 # ==========================================
 lint-backend:
   stage: lint
-  image: rust:1.88.0-slim
+  image: rust:1.88.0
   <<: *rust-cache
-  before_script:
-    - rustup component add clippy rustfmt
   script:
     - cd squirrel-engine
     - echo "Linting Rust formatting..."
@@ -81,7 +79,7 @@ lint-frontend:
 # ==========================================
 test-backend:
   stage: test
-  image: rust:1.88.0-slim
+  image: rust:1.88.0
   <<: *rust-cache
   script:
     - cd squirrel-engine
