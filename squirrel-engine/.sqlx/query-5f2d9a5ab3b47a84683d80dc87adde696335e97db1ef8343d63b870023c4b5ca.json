@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE global_state SET value = $1 WHERE key = 'slots_jackpot'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f2d9a5ab3b47a84683d80dc87adde696335e97db1ef8343d63b870023c4b5ca"
+}

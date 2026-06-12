@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squirrel-admin
+  namespace: game
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: squirrel-admin
+  template:
+    metadata:
+      labels:
+        app: squirrel-admin
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: squirrel-admin
+          image: registry.lakeofcolors.com/squirrel/squirrel-admin:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: squirrel-secrets
+          env:
+            - name: ALLOWED_HOSTS
+              value: "admin.lakeofcolors.com"
+            - name: CSRF_TRUSTED_ORIGINS
+              value: "https://admin.lakeofcolors.com"
+            - name: DEBUG
+              value: "False"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"

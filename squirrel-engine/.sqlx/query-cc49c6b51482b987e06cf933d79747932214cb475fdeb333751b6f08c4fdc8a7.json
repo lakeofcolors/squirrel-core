@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET tournament_coins = tournament_coins + 1000 WHERE telegram_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc49c6b51482b987e06cf933d79747932214cb475fdeb333751b6f08c4fdc8a7"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, room_id, clan1_id, clan2_id FROM tournament_matches WHERE tournament_id = $1 AND winner_id IS NULL AND created_at < NOW() - INTERVAL '5 minutes'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "room_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "clan1_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "clan2_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "fc053b2180bb75a60d782f7b3bca23b5f23d0fc142e3b09c1b972acc6cf91895"
+}

@@ -1,0 +1,94 @@
+global:
+  hosts:
+    domain: lakeofcolors.com
+    externalIP: 45.9.188.199
+
+  ingress:
+    enabled: true
+    class: nginx
+    configureCertmanager: true
+    tls:
+      enabled: true
+
+  certificates:
+    enabled: true
+
+  # ВАЖНО: глобально вырубаем HPA
+  hpa:
+    enabled: false
+
+gitlab:
+  webservice:
+    autoscaling:
+      enabled: false
+
+    deployment:
+      replicas: 1
+
+    puma:
+      workerProcesses: 2
+      minThreads: 2
+      maxThreads: 4
+
+    resources:
+      requests:
+        cpu: "300m"
+        memory: "1250Mi"
+      limits:
+        cpu: "1500m"
+        memory: "2500Mi"
+
+    livenessProbe:
+      initialDelaySeconds: 180
+    readinessProbe:
+      initialDelaySeconds: 180
+
+  sidekiq:
+    autoscaling:
+      enabled: false
+
+    deployment:
+      replicas: 1
+
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "1000Mi"
+      limits:
+        cpu: "1000m"
+        memory: "2000Mi"
+
+  gitlab-shell:
+    autoscaling:
+      enabled: false
+
+    service:
+      type: LoadBalancer
+      loadBalancerIP: 45.9.188.199
+
+  kas:
+    autoscaling:
+      enabled: false
+
+  registry:
+    autoscaling:
+      enabled: false
+
+postgresql:
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1500Mi"
+
+gitlab-runner:
+  install: false
+
+certmanager:
+  enabled: false
+
+certmanager-issuer:
+  enabled: true
+  email: admin@lakeofcolors.com

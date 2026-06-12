@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # 🔒 IP whitelist
+    nginx.ingress.kubernetes.io/whitelist-source-range: |
+      45.9.188.199/32
+spec:
+  tls:
+    - hosts:
+        - grafana.lakeofcolors.com
+      secretName: grafana-tls
+  rules:
+    - host: grafana.lakeofcolors.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 80

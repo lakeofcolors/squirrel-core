@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d70597033f8685064128e115ad7406e509016ac11862e2853e24a894bc9aea6f"
+}

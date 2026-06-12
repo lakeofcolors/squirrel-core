@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.login-bg {
+  background-image: url("./assets/login_wallpaper.jpg");
+  background-size: cover;      /* растягивает с сохранением пропорций */
+  background-position: center; /* центрирует */
+  background-repeat: no-repeat;/* убирает повтор */
+  width: 100%;
+  min-height: 100vh;           /* на всю высоту окна */
+}
+
+.animate-chip {
+  animation: chip-breathe 3.5s ease-in-out infinite;
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+}
+
+.group:hover .animate-chip {
+  transform: translateY(-4px) rotate(-3deg) scale(1.05);
+  box-shadow: 0 10px 30px rgba(239,68,68,0.6);
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.35s ease-out;
+}

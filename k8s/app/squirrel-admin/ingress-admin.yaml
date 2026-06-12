@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: squirrel-admin
+  namespace: game
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/whitelist-source-range: "45.9.188.199/32"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - admin.lakeofcolors.com
+    secretName: squirrel-admin-tls
+  rules:
+  - host: admin.lakeofcolors.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: squirrel-admin
+            port:
+              number: 80

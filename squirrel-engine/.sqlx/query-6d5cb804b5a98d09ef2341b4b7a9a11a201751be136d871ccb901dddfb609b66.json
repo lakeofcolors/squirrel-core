@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                                SELECT telegram_id FROM tournament_squads \n                                WHERE registration_id IN (\n                                    SELECT id FROM tournament_registrations WHERE tournament_id = $1 AND clan_id IN ($2, $3)\n                                )\n                                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "telegram_id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6d5cb804b5a98d09ef2341b4b7a9a11a201751be136d871ccb901dddfb609b66"
+}

@@ -1,0 +1,31 @@
+gitlabUrl: https://gitlab.lakeofcolors.com
+runnerRegistrationToken: "glrt-8_lYo8ksWsCDaXJLnV01DW86MQpwOjEKdDozCnU6MQ8.01.171k2p1bx"
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: gitlab-runner
+
+runners:
+  name: k8s-runner
+  tags: "k8s"
+  runUntagged: false
+  locked: false
+  privileged: false
+
+  config: |
+    [[runners]]
+      executor = "kubernetes"
+      [runners.kubernetes]
+        namespace = "ci"
+        image = "alpine:3.19"
+        privileged = false
+        cpu_request = "500m"
+        memory_request = "512Mi"
+        cpu_limit = "2"
+        memory_limit = "2Gi"
+
+metrics:
+  enabled: true

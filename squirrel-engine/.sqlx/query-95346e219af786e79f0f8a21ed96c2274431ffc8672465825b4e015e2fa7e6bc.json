@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, winner_id, match_index FROM tournament_matches WHERE tournament_id = $1 AND round = $2 ORDER BY match_index ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "winner_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "match_index",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "95346e219af786e79f0f8a21ed96c2274431ffc8672465825b4e015e2fa7e6bc"
+}

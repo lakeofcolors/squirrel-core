@@ -1,0 +1,17 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: gitlab-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 45.9.188.199/32
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: gitlab-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - gitlab-pool

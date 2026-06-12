@@ -2,34 +2,209 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   DOCKER_BUILDKIT: "1"
   IMAGE: $CI_REGISTRY_IMAGE
+  CARGO_HOME: $CI_PROJECT_DIR/squirrel-engine/.cargo-cache
 
 stages:
+  - lint
+  - test
   - build
   - migrate
   - deploy
 
-build-image:
+# ==========================================
+# Caches & Templates
+# ==========================================
+.rust-cache: &rust-cache
+  cache:
+    key: "rust-cache-$CI_COMMIT_REF_SLUG"
+    paths:
+      - squirrel-engine/.cargo-cache/
+      - squirrel-engine/target/
+
+.node-cache: &node-cache
+  cache:
+    key: "node-cache-$CI_COMMIT_REF_SLUG"
+    paths:
+      - squirrel-front/.npm/
+      - squirrel-front/node_modules/
+
+# ==========================================
+# STAGE: LINT
+# ==========================================
+lint-backend:
+  stage: lint
+  image: rust:1.88.0-slim
+  <<: *rust-cache
+  before_script:
+    - rustup component add clippy rustfmt
+  script:
+    - cd squirrel-engine
+    - echo "Linting Rust formatting..."
+    - cargo fmt --check
+    - echo "Running Clippy static analysis..."
+    - cargo clippy -- -D warnings
+  rules:
+    - changes:
+        - squirrel-engine/**/*
+        - .gitlab-ci.yml
+
+lint-admin:
+  stage: lint
+  image: python:3.11-slim
+  script:
+    - echo "Installing Ruff python linter..."
+    - pip install ruff
+    - echo "Running Ruff checks on Django Admin panel..."
+    - ruff check squirrel-admin
+  rules:
+    - changes:
+        - squirrel-admin/**/*
+        - .gitlab-ci.yml
+
+lint-frontend:
+  stage: lint
+  image: node:18-alpine
+  <<: *node-cache
+  script:
+    - echo "Installing frontend dependencies..."
+    - cd squirrel-front
+    - npm ci --cache .npm --prefer-offline
+    - echo "Linting React application using ESLint..."
+    - npx eslint src
+  rules:
+    - changes:
+        - squirrel-front/**/*
+        - .gitlab-ci.yml
+
+# ==========================================
+# STAGE: TEST
+# ==========================================
+test-backend:
+  stage: test
+  image: rust:1.88.0-slim
+  <<: *rust-cache
+  script:
+    - cd squirrel-engine
+    - echo "Running Rust unit/integration tests..."
+    - cargo test --release
+  rules:
+    - changes:
+        - squirrel-engine/**/*
+        - .gitlab-ci.yml
+
+test-frontend:
+  stage: test
+  image: node:18-alpine
+  <<: *node-cache
+  script:
+    - cd squirrel-front
+    - npm ci --cache .npm --prefer-offline
+    - echo "Running Frontend tests..."
+    - CI=true npm test
+  rules:
+    - changes:
+        - squirrel-front/**/*
+        - .gitlab-ci.yml
+
+# ==========================================
+# STAGE: BUILD
+# ==========================================
+build-backend:
   stage: build
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
-
-    - docker build -f ./etc/Dockerfile -t $IMAGE:$CI_COMMIT_SHA -t $IMAGE:latest .
-    - docker build -f ./etc/Dockerfile.migrations -t $IMAGE:migrations-$CI_COMMIT_SHA .
+    - echo "Pulling previous backend images for cache..."
+    - docker pull $IMAGE:latest || true
+    - docker pull $IMAGE:migrations-latest || true
+    - echo "Building main application image..."
+    - docker build --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $IMAGE:latest -f ./squirrel-engine/etc/Dockerfile -t $IMAGE:$CI_COMMIT_SHA -t $IMAGE:latest ./squirrel-engine
+    - echo "Building database migrations image..."
+    - docker build --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $IMAGE:migrations-latest -f ./squirrel-engine/etc/Dockerfile.migrations -t $IMAGE:migrations-$CI_COMMIT_SHA -t $IMAGE:migrations-latest ./squirrel-engine
+    - echo "Pushing images to registry..."
     - docker push $IMAGE:$CI_COMMIT_SHA
     - docker push $IMAGE:latest
     - docker push $IMAGE:migrations-$CI_COMMIT_SHA
+    - docker push $IMAGE:migrations-latest
+  rules:
+    - changes:
+        - squirrel-engine/**/*
+        - .gitlab-ci.yml
 
+build-frontend:
+  stage: build
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - echo "Pulling previous frontend image for cache..."
+    - docker pull $IMAGE/front:latest || true
+    - echo "Building frontend image..."
+    - docker build --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $IMAGE/front:latest -f ./squirrel-front/etc/Dockerfile -t $IMAGE/front:$CI_COMMIT_SHA -t $IMAGE/front:latest ./squirrel-front
+    - echo "Pushing frontend image to registry..."
+    - docker push $IMAGE/front:$CI_COMMIT_SHA
+    - docker push $IMAGE/front:latest
+  rules:
+    - changes:
+        - squirrel-front/**/*
+        - .gitlab-ci.yml
+
+# ==========================================
+# STAGE: MIGRATE
+# ==========================================
 migrate:
   stage: migrate
   script:
-    - sed -i "s|IMAGE_TAG|$CI_COMMIT_SHA|g" ./etc/squirrel-migrations.yaml
+    - echo "Preparing migration manifest..."
+    - sed "s|IMAGE_TAG|$CI_COMMIT_SHA|g" ./squirrel-engine/etc/squirrel-migrations.yaml > ./squirrel-engine/etc/squirrel-migrations-temp.yaml
     - kubectl -n game delete job squirrel-migrations --ignore-not-found
-    - kubectl apply -f ./etc/squirrel-migrations.yaml
-    - kubectl -n game wait --for=condition=complete job/squirrel-migrations --timeout=120s
+    - echo "Applying migration job..."
+    - kubectl apply -f ./squirrel-engine/etc/squirrel-migrations-temp.yaml
+    - echo "Waiting for migration to complete..."
+    - |
+      if ! kubectl -n game wait --for=condition=complete job/squirrel-migrations --timeout=120s; then
+        echo "ERROR: Migration job failed! Fetching logs:"
+        kubectl -n game logs job/squirrel-migrations --all-containers=true || true
+        exit 1
+      fi
+    - rm -f ./squirrel-engine/etc/squirrel-migrations-temp.yaml
+  rules:
+    - changes:
+        - squirrel-engine/**/*
+        - .gitlab-ci.yml
 
-deploy:
+# ==========================================
+# STAGE: DEPLOY
+# ==========================================
+deploy-backend:
   stage: deploy
   script:
-    - kubectl get deploy -n game
+    - echo "Restarting backend deployment..."
     - kubectl rollout restart deployment/squirrel-core -n game
-    - kubectl rollout status deployment/squirrel-core -n game --timeout=180s || true
+    - echo "Monitoring deployment status..."
+    - |
+      if ! kubectl rollout status deployment/squirrel-core -n game --timeout=180s; then
+        echo "ERROR: Deployment rollout failed! Fetching debugging information:"
+        kubectl -n game get pods -l app=squirrel-core
+        kubectl -n game describe pods -l app=squirrel-core | head -n 50 || true
+        exit 1
+      fi
+  rules:
+    - changes:
+        - squirrel-engine/**/*
+        - .gitlab-ci.yml
+
+deploy-frontend:
+  stage: deploy
+  script:
+    - echo "Restarting frontend deployment..."
+    - kubectl rollout restart deployment/squirrel-front -n game
+    - echo "Monitoring frontend deployment status..."
+    - |
+      if ! kubectl rollout status deployment/squirrel-front -n game --timeout=180s; then
+        echo "ERROR: Frontend deployment rollout failed! Fetching debugging information:"
+        kubectl -n game get pods -l app=squirrel-front
+        kubectl -n game describe pods -l app=squirrel-front | head -n 50 || true
+        exit 1
+      fi
+  rules:
+    - changes:
+        - squirrel-front/**/*
+        - .gitlab-ci.yml

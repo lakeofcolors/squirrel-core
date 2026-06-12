@@ -1,0 +1,19 @@
+image: ghcr.io/helmfile/helmfile:v0.160.0
+
+stages:
+  - lint
+  - deploy
+
+lint-infrastructure:
+  stage: lint
+  script:
+    - echo "Validating helmfile and values configuration..."
+    - helmfile lint
+
+deploy-infrastructure:
+  stage: deploy
+  script:
+    - echo "Applying declarative infrastructure changes..."
+    - helmfile apply --non-interactive
+  only:
+    - main

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squirrel-front
+  namespace: game
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: squirrel-front
+  template:
+    metadata:
+      labels:
+        app: squirrel-front
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      containers:
+        - name: frontend
+          image: registry.lakeofcolors.com/squirrel/squirrel-front:latest
+          ports:
+            - containerPort: 80

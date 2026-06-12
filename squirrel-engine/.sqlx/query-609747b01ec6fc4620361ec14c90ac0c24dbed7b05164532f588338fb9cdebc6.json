@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tournament_matches SET winner_id = $1 WHERE room_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "609747b01ec6fc4620361ec14c90ac0c24dbed7b05164532f588338fb9cdebc6"
+}

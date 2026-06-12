@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT cm.id, cm.sender_id, cm.message, cm.created_at, u.username\n        FROM clan_messages cm\n        JOIN users u ON u.telegram_id = cm.sender_id\n        WHERE cm.clan_id = $1\n        ORDER BY cm.created_at DESC\n        LIMIT 50\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "sender_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "username",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "bb17c25c1d0678ea36e9dcce7ee0a521216564854e7b2c17d6d918eaa79d9251"
+}
