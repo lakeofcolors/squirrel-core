@@ -61,7 +61,7 @@ lint-admin:
 
 lint-frontend:
   stage: lint
-  image: node:18-alpine
+  image: node:18-slim
   <<: *node-cache
   script:
     - echo "Installing frontend dependencies..."
@@ -92,7 +92,7 @@ test-backend:
 
 test-frontend:
   stage: test
-  image: node:18-alpine
+  image: node:18-slim
   <<: *node-cache
   script:
     - cd squirrel-front
