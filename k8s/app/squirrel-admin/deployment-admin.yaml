@@ -22,7 +22,7 @@ spec:
         - name: gitlab-registry
       containers:
         - name: squirrel-admin
-          image: registry.lakeofcolors.com/squirrel/squirrel-admin:latest
+          image: registry.lakeofcolors.com/squirrel/squirrel-core/admin:latest
           ports:
             - containerPort: 8000
           envFrom:

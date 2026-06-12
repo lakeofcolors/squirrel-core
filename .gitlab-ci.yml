@@ -146,6 +146,22 @@ build-frontend:
         - squirrel-front/**/*
         - .gitlab-ci.yml
 
+build-admin:
+  stage: build
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - echo "Pulling previous admin image for cache..."
+    - docker pull $IMAGE/admin:latest || true
+    - echo "Building admin image..."
+    - docker build --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from $IMAGE/admin:latest -f ./squirrel-admin/Dockerfile -t $IMAGE/admin:$CI_COMMIT_SHA -t $IMAGE/admin:latest ./squirrel-admin
+    - echo "Pushing admin image to registry..."
+    - docker push $IMAGE/admin:$CI_COMMIT_SHA
+    - docker push $IMAGE/admin:latest
+  rules:
+    - changes:
+        - squirrel-admin/**/*
+        - .gitlab-ci.yml
+
 # ==========================================
 # STAGE: MIGRATE
 # ==========================================
@@ -176,6 +192,8 @@ migrate:
 deploy-backend:
   stage: deploy
   script:
+    - echo "Applying backend manifests..."
+    - kubectl apply -f k8s/app/squirrel/
     - echo "Restarting backend deployment..."
     - kubectl rollout restart deployment/squirrel-core -n game
     - echo "Monitoring deployment status..."
@@ -189,11 +207,14 @@ deploy-backend:
   rules:
     - changes:
         - squirrel-engine/**/*
+        - k8s/app/squirrel/**/*
         - .gitlab-ci.yml
 
 deploy-frontend:
   stage: deploy
   script:
+    - echo "Applying frontend manifests..."
+    - kubectl apply -f k8s/app/squirrel-front/
     - echo "Restarting frontend deployment..."
     - kubectl rollout restart deployment/squirrel-front -n game
     - echo "Monitoring frontend deployment status..."
@@ -207,4 +228,26 @@ deploy-frontend:
   rules:
     - changes:
         - squirrel-front/**/*
+        - k8s/app/squirrel-front/**/*
+        - .gitlab-ci.yml
+
+deploy-admin:
+  stage: deploy
+  script:
+    - echo "Applying admin manifests..."
+    - kubectl apply -f k8s/app/squirrel-admin/
+    - echo "Restarting admin deployment..."
+    - kubectl rollout restart deployment/squirrel-admin -n game
+    - echo "Monitoring admin deployment status..."
+    - |
+      if ! kubectl rollout status deployment/squirrel-admin -n game --timeout=180s; then
+        echo "ERROR: Admin deployment rollout failed! Fetching debugging information:"
+        kubectl -n game get pods -l app=squirrel-admin
+        kubectl -n game describe pods -l app=squirrel-admin | head -n 50 || true
+        exit 1
+      fi
+  rules:
+    - changes:
+        - squirrel-admin/**/*
+        - k8s/app/squirrel-admin/**/*
         - .gitlab-ci.yml
