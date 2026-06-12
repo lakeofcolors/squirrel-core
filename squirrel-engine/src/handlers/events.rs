@@ -1,16 +1,8 @@
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::{
-    core::context::AppContext,
-    utils::jwt::AuthUser,
-};
+use crate::{core::context::AppContext, utils::jwt::AuthUser};
 
 #[derive(Serialize)]
 pub struct QuestDto {
@@ -64,7 +56,10 @@ pub async fn get_active_event(
          FROM events 
          WHERE is_active = TRUE AND start_time <= NOW() AND end_time >= NOW() 
          ORDER BY id DESC LIMIT 1"
-    ).fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     let event = match event {
         Some(e) => e,
@@ -74,12 +69,16 @@ pub async fn get_active_event(
     // Currency balance
     let currency_row = sqlx::query!(
         "SELECT amount FROM user_event_currency WHERE telegram_id = $1 AND event_id = $2",
-        user_id, event.id
-    ).fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
-    
+        user_id,
+        event.id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+
     let currency_balance = currency_row.map(|r| r.amount).unwrap_or(0);
 
-    // Fetch quests 
+    // Fetch quests
     // And initialize user_quest_progress if missing
     let quests = sqlx::query!(
         "SELECT q.id, q.quest_type, q.title, q.target_amount, q.reward_type, q.reward_amount, 
@@ -90,8 +89,12 @@ pub async fn get_active_event(
          LEFT JOIN user_quest_progress uqp ON q.id = uqp.quest_id AND uqp.telegram_id = $1
          WHERE q.event_id = $2
          ORDER BY q.sort_order ASC, q.id ASC",
-         user_id, event.id
-    ).fetch_all(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+        user_id,
+        event.id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     // Create user_quest_progress if it doesn't exist
     for q in &quests {
@@ -171,15 +174,22 @@ pub async fn claim_quest(
     let user_id = auth_user.telegram_id;
     let quest_id = payload.quest_id;
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     let quest_check = sqlx::query!(
         "SELECT eq.reward_type, eq.reward_amount, eq.event_id, uqp.is_completed, uqp.is_claimed 
          FROM event_quests eq
          JOIN user_quest_progress uqp ON eq.id = uqp.quest_id
          WHERE eq.id = $1 AND uqp.telegram_id = $2 FOR UPDATE",
-         quest_id, user_id
-    ).fetch_optional(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+        quest_id,
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     let quest = match quest_check {
         Some(q) => q,
@@ -196,8 +206,11 @@ pub async fn claim_quest(
     // Mark claimed
     let _ = sqlx::query!(
         "UPDATE user_quest_progress SET is_claimed = TRUE WHERE telegram_id = $1 AND quest_id = $2",
-        user_id, quest_id
-    ).execute(&mut *tx).await;
+        user_id,
+        quest_id
+    )
+    .execute(&mut *tx)
+    .await;
 
     // Grant reward
     match quest.reward_type.as_str() {
@@ -207,19 +220,25 @@ pub async fn claim_quest(
                  ON CONFLICT (telegram_id, event_id) DO UPDATE SET amount = user_event_currency.amount + $3",
                  user_id, quest.event_id, quest.reward_amount
             ).execute(&mut *tx).await;
-        },
+        }
         "nuts" => {
-             let _ = sqlx::query!(
+            let _ = sqlx::query!(
                 "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
-                 quest.reward_amount, user_id
-            ).execute(&mut *tx).await;
-        },
+                quest.reward_amount,
+                user_id
+            )
+            .execute(&mut *tx)
+            .await;
+        }
         "xp" => {
-             let _ = sqlx::query!(
+            let _ = sqlx::query!(
                 "UPDATE users SET xp = xp + $1 WHERE telegram_id = $2",
-                 quest.reward_amount, user_id
-            ).execute(&mut *tx).await;
-        },
+                quest.reward_amount,
+                user_id
+            )
+            .execute(&mut *tx)
+            .await;
+        }
         "chest" => {
             let chest_type = "common"; // In real implementation, dynamic based on quest
             let _ = sqlx::query!(
@@ -227,11 +246,13 @@ pub async fn claim_quest(
                  ON CONFLICT (telegram_id, chest_type) DO UPDATE SET amount = user_chests.amount + $3",
                  user_id, chest_type, quest.reward_amount
             ).execute(&mut *tx).await;
-        },
+        }
         _ => {}
     }
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({ "success": true }))))
 }
@@ -255,8 +276,12 @@ pub async fn buy_event_item(
          FROM event_shop_items esi
          LEFT JOIN user_event_purchases uep ON esi.id = uep.shop_item_id AND uep.telegram_id = $1
          WHERE esi.id = $2",
-        my_id, payload.shop_item_id
-    ).fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+        my_id,
+        payload.shop_item_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     let item = match item_row {
         Some(r) => r,
@@ -265,8 +290,12 @@ pub async fn buy_event_item(
 
     let currency_row = sqlx::query!(
         "SELECT amount FROM user_event_currency WHERE telegram_id = $1 AND event_id = $2",
-        my_id, item.event_id
-    ).fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+        my_id,
+        item.event_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     if let Some(max_p) = item.max_purchases {
         let p_count = item.purchase_count.unwrap_or(0);
@@ -280,15 +309,21 @@ pub async fn buy_event_item(
         return Err((StatusCode::BAD_REQUEST, "Недостаточно валюты".into()));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     let _ = sqlx::query!(
         "INSERT INTO user_event_purchases (telegram_id, shop_item_id, purchase_count)
          VALUES ($1, $2, 1)
          ON CONFLICT (telegram_id, shop_item_id)
          DO UPDATE SET purchase_count = user_event_purchases.purchase_count + 1",
-        my_id, payload.shop_item_id
-    ).execute(&mut *tx).await;
+        my_id,
+        payload.shop_item_id
+    )
+    .execute(&mut *tx)
+    .await;
 
     let _ = sqlx::query!(
         "UPDATE user_event_currency SET amount = amount - $1 WHERE telegram_id = $2 AND event_id = $3",
@@ -300,24 +335,35 @@ pub async fn buy_event_item(
         let _ = sqlx::query!(
             "INSERT INTO user_chests (telegram_id, chest_type, amount) VALUES ($1, $2, 1)
              ON CONFLICT (telegram_id, chest_type) DO UPDATE SET amount = user_chests.amount + 1",
-            my_id, item.item_id
-        ).execute(&mut *tx).await;
+            my_id,
+            item.item_id
+        )
+        .execute(&mut *tx)
+        .await;
     } else if item.item_type == "booster" {
         let _ = sqlx::query!(
             "INSERT INTO user_boosters (telegram_id, booster_id, amount) VALUES ($1, $2, 1)
              ON CONFLICT (telegram_id, booster_id) DO UPDATE SET amount = user_boosters.amount + 1",
-            my_id, item.item_id
-        ).execute(&mut *tx).await;
+            my_id,
+            item.item_id
+        )
+        .execute(&mut *tx)
+        .await;
     } else {
         let _ = sqlx::query!(
             "INSERT INTO user_inventory (telegram_id, item_type, item_id) VALUES ($1, $2, $3)
              ON CONFLICT DO NOTHING",
-            my_id, item.item_type, item.item_id
-        ).execute(&mut *tx).await;
+            my_id,
+            item.item_type,
+            item.item_id
+        )
+        .execute(&mut *tx)
+        .await;
     }
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))
 }
-

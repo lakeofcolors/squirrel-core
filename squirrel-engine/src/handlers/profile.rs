@@ -1,8 +1,12 @@
-use axum::{extract::{Extension, Path}, http::StatusCode, Json};
-use serde::Serialize;
-use std::sync::Arc;
 use crate::{core::context::AppContext, utils::jwt::AuthUser};
+use axum::{
+    extract::{Extension, Path},
+    http::StatusCode,
+    Json,
+};
+use serde::Serialize;
 use sqlx::Row;
+use std::sync::Arc;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,10 +77,18 @@ pub async fn get_profile(
     let telegram_id = auth_user.telegram_id;
     let pool = &app_ctx.db_pool;
 
-    let user_row = sqlx::query!("SELECT username, photo_url, rating, xp FROM users WHERE telegram_id = $1", telegram_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user".to_string()))?;
+    let user_row = sqlx::query!(
+        "SELECT username, photo_url, rating, xp FROM users WHERE telegram_id = $1",
+        telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch user".to_string(),
+        )
+    })?;
 
     let user_data = match user_row {
         Some(u) => u,
@@ -99,16 +111,21 @@ pub async fn get_profile(
             COALESCE(SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END), 0) as total_wins
         FROM match_history
         WHERE telegram_id = $1
-        "#
+        "#,
     )
     .bind(telegram_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get stats".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get stats".to_string(),
+        )
+    })?;
 
     let matches: i64 = stats_row.try_get("total_matches").unwrap_or(0);
     let wins: i64 = stats_row.try_get("total_wins").unwrap_or(0);
-    
+
     let winrate = if matches > 0 {
         format!("{}%", (wins as f64 / matches as f64 * 100.0).round() as i64)
     } else {
@@ -123,12 +140,17 @@ pub async fn get_profile(
             FROM users
         )
         SELECT rnk FROM ranked WHERE telegram_id = $1
-        "#
+        "#,
     )
     .bind(telegram_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get rank".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get rank".to_string(),
+        )
+    })?;
 
     let rank_place: i64 = rank_row.try_get("rnk").unwrap_or(0);
 
@@ -139,7 +161,7 @@ pub async fn get_profile(
         best_streak: 0, // placeholder
         rank_place,
         favorite_mode: "Ranked 2v2".into(), // placeholder
-        season_progress: 50, // placeholder
+        season_progress: 50,                // placeholder
     };
 
     // 2. History
@@ -161,8 +183,12 @@ pub async fn get_profile(
     let mut history = vec![];
     for row in history_rows {
         let delta: i32 = row.try_get("rating_delta").unwrap_or(0);
-        let delta_str = if delta > 0 { format!("+{}", delta) } else { delta.to_string() };
-        
+        let delta_str = if delta > 0 {
+            format!("+{}", delta)
+        } else {
+            delta.to_string()
+        };
+
         let time: String = row.try_get("created_at_str").unwrap_or_else(|_| "—".into());
 
         history.push(MatchHistoryDto {
@@ -182,12 +208,17 @@ pub async fn get_profile(
         FROM user_rewards
         WHERE telegram_id = $1
         ORDER BY unlocked_at DESC
-        "#
+        "#,
     )
     .bind(telegram_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get rewards".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get rewards".to_string(),
+        )
+    })?;
 
     let mut rewards = vec![];
     for row in rewards_rows {
@@ -207,7 +238,7 @@ pub async fn get_profile(
         JOIN achievements a ON a.key = ua.achievement_key
         WHERE ua.telegram_id = $1
         ORDER BY ua.unlocked_at DESC
-        "#
+        "#,
     )
     .bind(telegram_id)
     .fetch_all(pool)
@@ -232,7 +263,7 @@ pub async fn get_profile(
         FROM clan_members cm
         JOIN clans c ON c.id = cm.clan_id
         WHERE cm.telegram_id = $1
-        "#
+        "#,
     )
     .bind(telegram_id)
     .fetch_optional(pool)
@@ -270,10 +301,18 @@ pub async fn get_public_profile(
     let pool = &app_ctx.db_pool;
 
     // Fetch user details
-    let user_row = sqlx::query!("SELECT username, photo_url, rating, xp FROM users WHERE telegram_id = $1", target_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to check user".to_string()))?;
+    let user_row = sqlx::query!(
+        "SELECT username, photo_url, rating, xp FROM users WHERE telegram_id = $1",
+        target_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to check user".to_string(),
+        )
+    })?;
 
     let user_data = match user_row {
         Some(u) => u,
@@ -296,16 +335,21 @@ pub async fn get_public_profile(
             COALESCE(SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END), 0) as total_wins
         FROM match_history
         WHERE telegram_id = $1
-        "#
+        "#,
     )
     .bind(target_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get stats".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get stats".to_string(),
+        )
+    })?;
 
     let matches: i64 = stats_row.try_get("total_matches").unwrap_or(0);
     let wins: i64 = stats_row.try_get("total_wins").unwrap_or(0);
-    
+
     let winrate = if matches > 0 {
         format!("{}%", (wins as f64 / matches as f64 * 100.0).round() as i64)
     } else {
@@ -320,12 +364,17 @@ pub async fn get_public_profile(
             FROM users
         )
         SELECT rnk FROM ranked WHERE telegram_id = $1
-        "#
+        "#,
     )
     .bind(target_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get rank".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get rank".to_string(),
+        )
+    })?;
 
     let rank_place: i64 = rank_row.try_get("rnk").unwrap_or(0);
 
@@ -333,7 +382,7 @@ pub async fn get_public_profile(
         matches,
         wins,
         winrate,
-        best_streak: 0, 
+        best_streak: 0,
         rank_place,
         favorite_mode: "Ranked 2v2".into(),
         season_progress: 50,
@@ -358,8 +407,12 @@ pub async fn get_public_profile(
     let mut history = vec![];
     for row in history_rows {
         let delta: i32 = row.try_get("rating_delta").unwrap_or(0);
-        let delta_str = if delta > 0 { format!("+{}", delta) } else { delta.to_string() };
-        
+        let delta_str = if delta > 0 {
+            format!("+{}", delta)
+        } else {
+            delta.to_string()
+        };
+
         let time: String = row.try_get("created_at_str").unwrap_or_else(|_| "—".into());
 
         history.push(MatchHistoryDto {
@@ -379,12 +432,17 @@ pub async fn get_public_profile(
         FROM user_rewards
         WHERE telegram_id = $1
         ORDER BY unlocked_at DESC
-        "#
+        "#,
     )
     .bind(target_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get rewards".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get rewards".to_string(),
+        )
+    })?;
 
     let mut rewards = vec![];
     for row in rewards_rows {
@@ -404,7 +462,7 @@ pub async fn get_public_profile(
         JOIN achievements a ON a.key = ua.achievement_key
         WHERE ua.telegram_id = $1
         ORDER BY ua.unlocked_at DESC
-        "#
+        "#,
     )
     .bind(target_id)
     .fetch_all(pool)
@@ -429,7 +487,7 @@ pub async fn get_public_profile(
         FROM clan_members cm
         JOIN clans c ON c.id = cm.clan_id
         WHERE cm.telegram_id = $1
-        "#
+        "#,
     )
     .bind(target_id)
     .fetch_optional(pool)

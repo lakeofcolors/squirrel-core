@@ -1,8 +1,8 @@
+use crate::{core::context::AppContext, core::pool::PlayerStatus, utils::jwt::AuthUser};
 use axum::{extract::Extension, http::StatusCode, Json};
 use serde::Serialize;
-use std::sync::Arc;
-use crate::{core::context::AppContext, utils::jwt::AuthUser, core::pool::PlayerStatus};
 use sqlx::Row;
+use std::sync::Arc;
 
 #[derive(Serialize)]
 pub struct FriendDto {
@@ -30,14 +30,17 @@ pub async fn get_friends(
         FROM user_friends uf
         JOIN users u ON u.telegram_id = uf.friend_telegram_id
         WHERE uf.user_telegram_id = $1
-        "#
+        "#,
     )
     .bind(auth_user.telegram_id)
     .fetch_all(&app_ctx.db_pool)
     .await
     .map_err(|e| {
         tracing::error!("Failed to fetch friends: {:?}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch friends".to_string())
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch friends".to_string(),
+        )
     })?;
 
     let mut friends = Vec::new();
@@ -46,7 +49,9 @@ pub async fn get_friends(
         let name: Option<String> = row.try_get("username").unwrap_or(None);
         let photo_url: Option<String> = row.try_get("photo_url").unwrap_or(None);
         let name_str = name.clone().unwrap_or_else(|| "anon".to_string());
-        let avatar = photo_url.clone().unwrap_or_else(|| format!("https://api.dicebear.com/7.x/thumbs/svg?seed={}", name_str));
+        let avatar = photo_url.clone().unwrap_or_else(|| {
+            format!("https://api.dicebear.com/7.x/thumbs/svg?seed={}", name_str)
+        });
         let rating: i32 = row.try_get("rating").unwrap_or(0);
         let telegram_id: i64 = row.try_get("telegram_id").unwrap_or(0);
         let is_online = app_ctx.connection_pool().get(&telegram_id).is_some();
@@ -100,12 +105,17 @@ pub async fn get_friends(
             }
         }
 
-        tracing::info!("Friend query: id={} online={} status_str={}", friend_id, online, status_str);
+        tracing::info!(
+            "Friend query: id={} online={} status_str={}",
+            friend_id,
+            online,
+            status_str
+        );
         friends.push(FriendDto {
             id: friend_id,
             name: name_str,
             league: league.to_string(),
-            online, 
+            online,
             status: status_str,
             avatar,
             room_id: current_room_id,
@@ -116,8 +126,8 @@ pub async fn get_friends(
     Ok(Json(friends))
 }
 
-use serde::Deserialize;
 use axum::extract::Path;
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct ConsumeInviteRequest {
@@ -153,10 +163,18 @@ pub async fn consume_invite(
         return Err((StatusCode::BAD_REQUEST, "Cannot add yourself".into()));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
-    let inviter_exists = sqlx::query!("SELECT 1 as x FROM users WHERE telegram_id = $1", inviter_id)
-        .fetch_optional(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let inviter_exists = sqlx::query!(
+        "SELECT 1 as x FROM users WHERE telegram_id = $1",
+        inviter_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     if inviter_exists.is_none() {
         return Err((StatusCode::NOT_FOUND, "Inviter not found".into()));
@@ -177,8 +195,11 @@ pub async fn consume_invite(
             "UPDATE friend_requests SET status = 'accepted', responded_at = NOW() 
              WHERE (from_telegram_id = $1 AND to_telegram_id = $2) 
                 OR (from_telegram_id = $2 AND to_telegram_id = $1)",
-            my_id, inviter_id
-        ).execute(&mut *tx).await;
+            my_id,
+            inviter_id
+        )
+        .execute(&mut *tx)
+        .await;
 
         let _ = sqlx::query(
             "UPDATE user_quest_progress 
@@ -197,7 +218,9 @@ pub async fn consume_invite(
         ).bind(&vec![my_id, inviter_id]).execute(&mut *tx).await;
     }
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))
 }
@@ -217,8 +240,12 @@ pub async fn send_request(
 
     let is_already_friend = sqlx::query!(
         "SELECT 1 as x FROM user_friends WHERE user_telegram_id = $1 AND friend_telegram_id = $2",
-        my_id, target_id
-    ).fetch_optional(pool).await.unwrap_or(None);
+        my_id,
+        target_id
+    )
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
 
     if is_already_friend.is_some() {
         return Err((StatusCode::BAD_REQUEST, "Already friends".into()));
@@ -230,7 +257,10 @@ pub async fn send_request(
         my_id, target_id
     ).execute(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
-    Ok((StatusCode::CREATED, Json(serde_json::json!({"success": true}))))
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({"success": true})),
+    ))
 }
 
 pub async fn get_requests(
@@ -256,7 +286,10 @@ pub async fn get_requests(
         result.push(FriendRequestDto {
             id: row.try_get("id").unwrap(),
             from_telegram_id: row.try_get("from_telegram_id").unwrap(),
-            username: row.try_get::<Option<String>, _>("username").unwrap_or_default().unwrap_or_else(|| "anon".into()),
+            username: row
+                .try_get::<Option<String>, _>("username")
+                .unwrap_or_default()
+                .unwrap_or_else(|| "anon".into()),
             photo_url: row.try_get("photo_url").unwrap_or(None),
             rating: row.try_get("rating").unwrap_or(0),
             created_at: row.try_get("date_str").unwrap_or_default(),
@@ -288,12 +321,17 @@ pub async fn accept_request(
         return Err((StatusCode::FORBIDDEN, "Not your request".into()));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     let _ = sqlx::query!(
         "UPDATE friend_requests SET status = 'accepted', responded_at = NOW() WHERE id = $1",
         request_id
-    ).execute(&mut *tx).await;
+    )
+    .execute(&mut *tx)
+    .await;
 
     let _ = sqlx::query!(
         "INSERT INTO user_friends (user_telegram_id, friend_telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -322,7 +360,9 @@ pub async fn accept_request(
          AND current_amount >= (SELECT target_amount FROM event_quests WHERE id = user_quest_progress.quest_id)"
     ).bind(&vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))
 }
@@ -334,7 +374,7 @@ pub async fn decline_request(
 ) -> Result<impl axum::response::IntoResponse, (StatusCode, String)> {
     let pool = &app_ctx.db_pool;
     let my_id = auth_user.telegram_id;
-    
+
     // We update without selecting to verify if it's ours implicitly via WHERE
     let row = sqlx::query!(
         "UPDATE friend_requests SET status = 'declined', responded_at = NOW() WHERE id = $1 AND to_telegram_id = $2 RETURNING id",
@@ -342,7 +382,10 @@ pub async fn decline_request(
     ).fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".to_string()))?;
 
     if row.is_none() {
-        return Err((StatusCode::NOT_FOUND, "Request not found or not yours".into()));
+        return Err((
+            StatusCode::NOT_FOUND,
+            "Request not found or not yours".into(),
+        ));
     }
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))
@@ -371,7 +414,7 @@ pub async fn search_users(
     if query.q.trim().len() < 2 {
         return Ok(Json(vec![]));
     }
-    
+
     let search_term = format!("%{}%", query.q.trim().to_lowercase());
     let pool = &app_ctx.db_pool;
     let my_id = auth_user.telegram_id;

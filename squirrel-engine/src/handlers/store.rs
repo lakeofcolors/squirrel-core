@@ -1,11 +1,7 @@
 use std::env;
 use std::sync::Arc;
 
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, Json};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -32,7 +28,7 @@ pub struct StoreNutsPackDto {
 
 #[derive(Debug, Serialize)]
 pub struct StoreCosmeticDto {
-    pub id: String,           // deck_pink
+    pub id: String, // deck_pink
     pub item_type: String,
     pub item_key: String,
     pub title: String,
@@ -204,8 +200,12 @@ struct AnswerPreCheckoutQueryRequest<'a> {
 ========================= */
 
 fn telegram_bot_token() -> Result<String, (StatusCode, String)> {
-    env::var("BOT_TOKEN")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "TELEGRAM_BOT_TOKEN not set".to_string()))
+    env::var("BOT_TOKEN").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TELEGRAM_BOT_TOKEN not set".to_string(),
+        )
+    })
 }
 
 fn telegram_api_base() -> Result<String, (StatusCode, String)> {
@@ -329,20 +329,26 @@ pub async fn get_store(
     let mut boosters = Vec::new();
 
     for row in cosmetics {
-        
         let i_type: String = row.try_get("item_type").unwrap();
         let i_key: String = row.try_get("item_key").unwrap();
-        
+
         let (owned, amount) = if i_type == "booster" {
-            // We use block_on or spawn? Wait! We can't await inside synchronous loop if it's PGRow! 
+            // We use block_on or spawn? Wait! We can't await inside synchronous loop if it's PGRow!
             // Wait, the outer loop is `for row in cosmetics {`
             // `cosmetics` is `Vec<PgRow>`, so we CAN await if we change the loop to `for row in cosmetics` in an async context. But it's already an async block! No, `fetch_all` returns a Vec, so we can iterate.
-            
-            // To fetch amount, we need another query! 
+
+            // To fetch amount, we need another query!
             // But doing queries in a loop is an N+1 problem.
-            // Better to just keep the original structure, and we inject amount inside the loop! 
+            // Better to just keep the original structure, and we inject amount inside the loop!
             // `pool` is borrowed.
-            let a = sqlx::query!("SELECT amount FROM user_boosters WHERE telegram_id = $1 AND booster_id = $2", telegram_id, i_key).fetch_optional(&app_ctx.db_pool).await.unwrap_or(None);
+            let a = sqlx::query!(
+                "SELECT amount FROM user_boosters WHERE telegram_id = $1 AND booster_id = $2",
+                telegram_id,
+                i_key
+            )
+            .fetch_optional(&app_ctx.db_pool)
+            .await
+            .unwrap_or(None);
             let b_amount = a.map(|r| r.amount).unwrap_or(0);
             (b_amount > 0, Some(b_amount))
         } else {
@@ -483,7 +489,6 @@ async fn answer_pre_checkout_query(
     Ok(())
 }
 
-
 pub async fn create_invoice(
     auth_user: AuthUser,
     Extension(app_ctx): Extension<Arc<AppContext>>,
@@ -541,10 +546,7 @@ pub async fn create_invoice(
         }],
     };
 
-    let url = format!(
-        "{}/createInvoiceLink",
-        telegram_api_base()?
-    );
+    let url = format!("{}/createInvoiceLink", telegram_api_base()?);
 
     let client = Client::new();
     let resp = client.post(url).json(&body).send().await.map_err(|e| {
@@ -739,7 +741,10 @@ pub async fn buy_item_for_nuts(
         .await
         .map_err(|e| {
             error!("Failed to insert booster: {:?}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save booster".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to save booster".to_string(),
+            )
         })?;
     } else {
         sqlx::query(
@@ -816,7 +821,10 @@ pub async fn start_rewarded_session(
 ) -> Result<Json<StartRewardedResponse>, (StatusCode, String)> {
     let reward_session_id = Uuid::new_v4().to_string();
     let reward_amount = 50_i64;
-    let custom_data = format!("reward:{}:user:{}", reward_session_id, auth_user.telegram_id);
+    let custom_data = format!(
+        "reward:{}:user:{}",
+        reward_session_id, auth_user.telegram_id
+    );
 
     Ok(Json(StartRewardedResponse {
         reward_session_id,
@@ -881,8 +889,12 @@ async fn handle_pre_checkout(
         return Ok(());
     };
 
-    let xtr_amount: i64 = row.try_get("xtr_amount").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let status: String = row.try_get("status").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let xtr_amount: i64 = row
+        .try_get("xtr_amount")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let status: String = row
+        .try_get("status")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if status != "pending" {
         answer_pre_checkout_query(&query.id, false, Some("Order already processed")).await?;
@@ -934,12 +946,18 @@ async fn handle_successful_payment(
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let status: String = order_row.try_get("status").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let xtr_amount: i64 = order_row.try_get("xtr_amount").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let status: String = order_row
+        .try_get("status")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let xtr_amount: i64 = order_row
+        .try_get("xtr_amount")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // идемпотентность
     if status == "paid" {
-        tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        tx.commit()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         return Ok(());
     }
 

@@ -1,4 +1,4 @@
-use axum::{extract::Extension, http::StatusCode, Json, response::IntoResponse};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -52,7 +52,7 @@ pub async fn claim_daily_reward(
 
     // Give reward for `current_streak + 1`
     let day = (current_streak % 7) + 1;
-    
+
     let mut reward_type = "nuts".to_string();
     let mut amount = None;
     let mut chest_type = None;
@@ -60,11 +60,20 @@ pub async fn claim_daily_reward(
     match day {
         1 => amount = Some(50),
         2 => amount = Some(150),
-        3 => { reward_type = "chest".to_string(); chest_type = Some("common".to_string()); },
+        3 => {
+            reward_type = "chest".to_string();
+            chest_type = Some("common".to_string());
+        }
         4 => amount = Some(300),
         5 => amount = Some(500),
-        6 => { reward_type = "chest".to_string(); chest_type = Some("rare".to_string()); },
-        7 => { reward_type = "chest".to_string(); chest_type = Some("epic".to_string()); },
+        6 => {
+            reward_type = "chest".to_string();
+            chest_type = Some("rare".to_string());
+        }
+        7 => {
+            reward_type = "chest".to_string();
+            chest_type = Some("epic".to_string());
+        }
         _ => amount = Some(50),
     }
 
@@ -72,7 +81,8 @@ pub async fn claim_daily_reward(
         let nuts_earned = amount.unwrap();
         let _ = sqlx::query!(
             "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
-            nuts_earned as i32, user_id
+            nuts_earned as i32,
+            user_id
         )
         .execute(&mut *tx)
         .await;
@@ -88,7 +98,9 @@ pub async fn claim_daily_reward(
 
     let _ = sqlx::query!(
         "UPDATE users SET last_daily_claim = $1, daily_streak = $2 WHERE telegram_id = $3",
-        now, current_streak + 1, user_id
+        now,
+        current_streak + 1,
+        user_id
     )
     .execute(&mut *tx)
     .await;
@@ -97,12 +109,16 @@ pub async fn claim_daily_reward(
         return (StatusCode::INTERNAL_SERVER_ERROR, "Commit Err").into_response();
     }
 
-    (StatusCode::OK, Json(DailyRewardResponse {
-        day,
-        reward_type,
-        amount,
-        chest_type,
-    })).into_response()
+    (
+        StatusCode::OK,
+        Json(DailyRewardResponse {
+            day,
+            reward_type,
+            amount,
+            chest_type,
+        }),
+    )
+        .into_response()
 }
 
 pub async fn get_daily_status(
@@ -141,12 +157,16 @@ pub async fn get_daily_status(
 
         let day = (current_streak % 7) + 1;
 
-        return (StatusCode::OK, Json(serde_json::json!({
-            "can_claim": can_claim,
-            "hours_until": hours_until,
-            "next_day": day,
-            "current_streak": row.daily_streak,
-        }))).into_response();
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "can_claim": can_claim,
+                "hours_until": hours_until,
+                "next_day": day,
+                "current_streak": row.daily_streak,
+            })),
+        )
+            .into_response();
     }
 
     (StatusCode::NOT_FOUND, "User not found").into_response()

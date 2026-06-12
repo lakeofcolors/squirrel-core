@@ -1,17 +1,9 @@
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use rand::Rng;
 
-use crate::{
-    core::context::AppContext,
-    utils::jwt::AuthUser,
-};
+use crate::{core::context::AppContext, utils::jwt::AuthUser};
 
 #[derive(Deserialize)]
 pub struct OpenChestRequest {
@@ -48,7 +40,8 @@ pub async fn open_chest(
     // check chest amount
     let chest_row = sqlx::query!(
         "SELECT amount FROM user_chests WHERE telegram_id = $1 AND chest_type = $2 FOR UPDATE",
-        user_id, chest_type
+        user_id,
+        chest_type
     )
     .fetch_optional(&mut *tx)
     .await;
@@ -108,11 +101,11 @@ pub async fn open_chest(
 
         let _ = sqlx::query!(
             "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
-            nuts_earned, user_id
+            nuts_earned,
+            user_id
         )
         .execute(&mut *tx)
         .await;
-
     } else {
         // give cosmetic
         // select a random cosmetic
@@ -143,24 +136,25 @@ pub async fn open_chest(
         .unwrap_or_default();
 
         if cosmetics.is_empty() {
-             // fallback to nuts
-             let fallback_nuts = 200;
-             reward_type = "nuts".to_string();
-             amount = Some(fallback_nuts);
-             let _ = sqlx::query!(
-                 "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
-                 fallback_nuts, user_id
-             )
-             .execute(&mut *tx)
-             .await;
+            // fallback to nuts
+            let fallback_nuts = 200;
+            reward_type = "nuts".to_string();
+            amount = Some(fallback_nuts);
+            let _ = sqlx::query!(
+                "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
+                fallback_nuts,
+                user_id
+            )
+            .execute(&mut *tx)
+            .await;
         } else {
-             let idx = {
-                 let mut rng = rand::thread_rng();
-                 rng.gen_range(0..cosmetics.len())
-             };
-             let selected_item = &cosmetics[idx];
+            let idx = {
+                let mut rng = rand::thread_rng();
+                rng.gen_range(0..cosmetics.len())
+            };
+            let selected_item = &cosmetics[idx];
 
-             let already_owned = sqlx::query!(
+            let already_owned = sqlx::query!(
                  "SELECT id FROM user_inventory WHERE telegram_id = $1 AND item_type = $2 AND item_id = $3",
                  user_id, selected_item.item_type, selected_item.item_key
              )
@@ -169,30 +163,31 @@ pub async fn open_chest(
              .unwrap_or(None)
              .is_some();
 
-             if already_owned {
-                 is_duplicate = Some(true);
-                 let comp = (selected_item.price_nuts / 3) as i32 + 50;
-                 reward_type = "nuts".to_string();
-                 amount = Some(comp);
-                  let _ = sqlx::query!(
-                     "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
-                     comp, user_id
-                 )
-                 .execute(&mut *tx)
-                 .await;
-                 item_id = Some(selected_item.id.clone());
-             } else {
-                 is_duplicate = Some(false);
-                 reward_type = "cosmetic".to_string();
-                 item_id = Some(selected_item.id.clone());
+            if already_owned {
+                is_duplicate = Some(true);
+                let comp = (selected_item.price_nuts / 3) as i32 + 50;
+                reward_type = "nuts".to_string();
+                amount = Some(comp);
+                let _ = sqlx::query!(
+                    "UPDATE users SET free_coins = free_coins + $1 WHERE telegram_id = $2",
+                    comp,
+                    user_id
+                )
+                .execute(&mut *tx)
+                .await;
+                item_id = Some(selected_item.id.clone());
+            } else {
+                is_duplicate = Some(false);
+                reward_type = "cosmetic".to_string();
+                item_id = Some(selected_item.id.clone());
 
-                 let _ = sqlx::query!(
+                let _ = sqlx::query!(
                      "INSERT INTO user_inventory (telegram_id, item_type, item_id) VALUES ($1, $2, $3)",
                      user_id, selected_item.item_type, selected_item.item_key
                  )
                  .execute(&mut *tx)
                  .await;
-             }
+            }
         }
     }
 
@@ -209,7 +204,7 @@ pub async fn open_chest(
             is_duplicate,
         }),
     )
-    .into_response()
+        .into_response()
 }
 
 #[derive(Serialize)]
@@ -275,9 +270,12 @@ pub async fn buy_chest(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "DB Error").into_response(),
     };
 
-    let user_balance = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1 FOR UPDATE", user_id)
-        .fetch_optional(&mut *tx)
-        .await;
+    let user_balance = sqlx::query!(
+        "SELECT free_coins FROM users WHERE telegram_id = $1 FOR UPDATE",
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await;
 
     let balance = match user_balance {
         Ok(Some(row)) => row.free_coins as i32,
@@ -288,10 +286,14 @@ pub async fn buy_chest(
         return (StatusCode::BAD_REQUEST, "Not enough nuts").into_response();
     }
 
-    let _ = sqlx::query!("UPDATE users SET free_coins = free_coins - $1 WHERE telegram_id = $2", price, user_id)
-        .execute(&mut *tx)
-        .await;
-        
+    let _ = sqlx::query!(
+        "UPDATE users SET free_coins = free_coins - $1 WHERE telegram_id = $2",
+        price,
+        user_id
+    )
+    .execute(&mut *tx)
+    .await;
+
     let _ = sqlx::query!(
         "INSERT INTO user_chests (telegram_id, chest_type, amount) VALUES ($1, $2, 1) ON CONFLICT (telegram_id, chest_type) DO UPDATE SET amount = user_chests.amount + 1",
         user_id, chest_type

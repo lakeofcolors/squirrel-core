@@ -1,16 +1,8 @@
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{
-    core::context::AppContext,
-    utils::jwt::AuthUser,
-};
+use crate::{core::context::AppContext, utils::jwt::AuthUser};
 
 #[derive(Deserialize)]
 pub struct UseItemRequest {
@@ -26,17 +18,27 @@ pub async fn use_item(
     let user_id = auth_user.telegram_id;
     let item_key = payload.item_key;
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     // Check if user has booster
     let inv = sqlx::query!(
         "SELECT amount FROM user_boosters WHERE telegram_id = $1 AND booster_id = $2 FOR UPDATE",
-        user_id, item_key
-    ).fetch_optional(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+        user_id,
+        item_key
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     let amount = inv.map(|r| r.amount).unwrap_or(0);
     if amount <= 0 {
-        return Err((StatusCode::BAD_REQUEST, "Вы не владеете этим предметом".into()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Вы не владеете этим предметом".into(),
+        ));
     }
 
     // Apply booster
@@ -61,10 +63,15 @@ pub async fn use_item(
             ).execute(&mut *tx).await;
         }
     } else {
-        return Err((StatusCode::BAD_REQUEST, "Предмет нельзя использовать".into()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Предмет нельзя использовать".into(),
+        ));
     }
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({ "success": true }))))
 }

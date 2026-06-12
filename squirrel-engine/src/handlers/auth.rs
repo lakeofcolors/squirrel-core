@@ -1,14 +1,13 @@
-use axum::{
-    extract::Json,
-    http::StatusCode,
-    response::IntoResponse, Extension,
-};
+use axum::{extract::Json, http::StatusCode, response::IntoResponse, Extension};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{error, info};
 
-use crate::{utils::{telegram::verify_telegram_auth, jwt::AuthUser}, core::context::AppContext};
 use crate::utils::jwt::{generate_token, validate_token};
+use crate::{
+    core::context::AppContext,
+    utils::{jwt::AuthUser, telegram::verify_telegram_auth},
+};
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -111,10 +110,9 @@ pub async fn telegram_login(
             .execute(&*pool)
             .await;
 
-
             match (
-                generate_token(telegram_id, Some(7200)),       // 2 hour
-                generate_token(telegram_id, Some(7 * 24 * 3600)) // 7 days
+                generate_token(telegram_id, Some(7200)),          // 2 hour
+                generate_token(telegram_id, Some(7 * 24 * 3600)), // 7 days
             ) {
                 (Ok(access_token), Ok(refresh_token)) => {
                     let response = TokenResponse {
@@ -133,16 +131,14 @@ pub async fn telegram_login(
     }
 }
 
-pub async fn refresh_token(
-    Json(payload): Json<RefreshRequest>,
-) -> impl IntoResponse {
+pub async fn refresh_token(Json(payload): Json<RefreshRequest>) -> impl IntoResponse {
     match validate_token(&payload.refresh_token) {
         Ok(claims) => {
             let telegram_id = claims.sub;
 
             match (
                 generate_token(telegram_id, Some(7200)),
-                generate_token(telegram_id, Some(7 * 24 * 3600))
+                generate_token(telegram_id, Some(7 * 24 * 3600)),
             ) {
                 (Ok(access_token), Ok(refresh_token)) => {
                     let response = TokenResponse {
@@ -198,10 +194,7 @@ pub async fn me(
         }
         Err(err) => {
             error!("DB error: {:?}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Database error"
-            ).into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response()
         }
     }
 }

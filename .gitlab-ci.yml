@@ -17,8 +17,9 @@ lint-backend:
   stage: lint
   script:
     - echo "Running Rust format and clippy linting inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 sh -c "cargo fmt --check && cargo clippy -- -D warnings"
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 sh -c "rustup component add rustfmt clippy && cargo fmt --check && cargo clippy -- -D warnings"
   rules:
+
     - changes:
         - squirrel-engine/**/*
         - .gitlab-ci.yml

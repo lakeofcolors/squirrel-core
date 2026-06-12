@@ -81,7 +81,8 @@ pub async fn get_leaderboard(
         telegram_id_user
     )
     .fetch_all(&*pool)
-    .await {
+    .await
+    {
         Ok(r) => r,
         Err(e) => {
             error!("Database error calculating leaderboard: {:?}", e);
@@ -98,15 +99,15 @@ pub async fn get_leaderboard(
         if username.trim().is_empty() {
             username = "anon".to_string();
         }
-        
+
         let rank = r.rank.unwrap_or(0);
         let is_me = r.telegram_id == telegram_id_user;
         let is_top = rank <= 50;
         let is_around_my_rank = my_player.as_ref().map_or(
             // if we haven't seen my_player yet, we can't perfectly filter `around_me` yet,
             // but we can trust the SQL output that if it's not top_players, it must be around_me or myself
-            !is_top, 
-            |_| !is_top
+            !is_top,
+            |_| !is_top,
         );
 
         let user = LeaderboardUser {

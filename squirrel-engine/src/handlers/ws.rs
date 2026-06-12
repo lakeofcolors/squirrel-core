@@ -1,52 +1,46 @@
-use axum::{
-    http::{StatusCode, HeaderMap},
-    response::IntoResponse,
-};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::Extension;
-use futures_util::StreamExt;
+use axum::{
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+};
 use futures_util::SinkExt;
+use futures_util::StreamExt;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::{self};
-use tracing::{info, warn, debug, error};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     core::context::AppContext,
     core::pool::{ConnectionPool, PlayerStatus},
-    utils::schemas::{QueueCommand, QueueKey, Card, WSIncomingMessage, WSEvent, RoomKind, PlayerMeta},
-    utils::{jwt::{validate_token}, schemas::RoomManagerCommand},
+    utils::schemas::{
+        Card, PlayerMeta, QueueCommand, QueueKey, RoomKind, WSEvent, WSIncomingMessage,
+    },
+    utils::{jwt::validate_token, schemas::RoomManagerCommand},
 };
-
 
 pub async fn ws_handler(
     app_ctx: Extension<Arc<AppContext>>,
     ws: WebSocketUpgrade,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     let protocols = match headers.get("sec-websocket-protocol") {
         Some(v) => v.to_str().ok(),
         None => None,
     };
 
-    let token = match protocols
-        .and_then(|p| p.split(',').map(|s| s.trim()).nth(1))
-    {
+    let token = match protocols.and_then(|p| p.split(',').map(|s| s.trim()).nth(1)) {
         Some(t) => t,
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
-    let player_id = match validate_token(token){
-        Ok(claims) => {
-            claims.sub
-        }
-        Err(_) => {
-            return StatusCode::UNAUTHORIZED.into_response()
-        }
+    let player_id = match validate_token(token) {
+        Ok(claims) => claims.sub,
+        Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
     ws.protocols(["jwt"])
         .on_upgrade(move |socket| handle_socket(socket, app_ctx.0.clone(), player_id))
-
 }
 
 async fn handle_incoming(
@@ -56,18 +50,28 @@ async fn handle_incoming(
     player_id: i64,
 ) {
     match incoming {
-
-        WSIncomingMessage::FindGame { stake, currency, league } => {
+        WSIncomingMessage::FindGame {
+            stake,
+            currency,
+            league,
+        } => {
             let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&stake).unwrap_or(0);
             if stake_val > 0 {
-                let check_coins = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player_id)
-                    .fetch_one(&app_ctx.db_pool)
-                    .await;
+                let check_coins = sqlx::query!(
+                    "SELECT free_coins FROM users WHERE telegram_id = $1",
+                    player_id
+                )
+                .fetch_one(&app_ctx.db_pool)
+                .await;
                 match check_coins {
                     Ok(row) => {
                         if row.free_coins < stake_val {
                             if let Some(session) = connection_pool.get(&player_id) {
-                                let _ = session.send(WSEvent::Error { detail: "Недостаточно орехов для этой ставки".to_string() }).await;
+                                let _ = session
+                                    .send(WSEvent::Error {
+                                        detail: "Недостаточно орехов для этой ставки".to_string(),
+                                    })
+                                    .await;
                             }
                             return;
                         }
@@ -78,45 +82,53 @@ async fn handle_incoming(
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
-                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    let _ = session
+                        .send(WSEvent::Error {
+                            detail: "Вы уже находитесь в игре или очереди".to_string(),
+                        })
+                        .await;
                     return;
                 }
             }
 
-            let _ = app_ctx.queue_manager.send(
-                QueueCommand::Enqueue {
-                    player: player_id,
-                    key: QueueKey {
-                        stake,
-                        currency,
-                        league,
-                    },
+            let _ = app_ctx.queue_manager.send(QueueCommand::Enqueue {
+                player: player_id,
+                key: QueueKey {
+                    stake,
+                    currency,
+                    league,
                 },
-            );
+            });
 
             if let Some(session) = connection_pool.get(&player_id) {
                 session.mark_as_in_queue().await;
             }
         }
 
-        WSIncomingMessage::CancelSearch { stake, currency, league } => {
-            let _ = app_ctx.queue_manager.send(
-                QueueCommand::Dequeue {
-                    player: player_id,
-                    key: QueueKey {
-                        stake,
-                        currency,
-                        league,
-                    },
+        WSIncomingMessage::CancelSearch {
+            stake,
+            currency,
+            league,
+        } => {
+            let _ = app_ctx.queue_manager.send(QueueCommand::Dequeue {
+                player: player_id,
+                key: QueueKey {
+                    stake,
+                    currency,
+                    league,
                 },
-            );
+            });
 
             if let Some(session) = connection_pool.get(&player_id) {
                 session.mark_back_to_connected().await;
             }
         }
 
-        WSIncomingMessage::InviteFriend { room_id, friend_id, target_bot_id } => {
+        WSIncomingMessage::InviteFriend {
+            room_id,
+            friend_id,
+            target_bot_id,
+        } => {
             let _ = app_ctx.room_manager.send(RoomManagerCommand::InvitePlayer {
                 room_id,
                 inviter_id: player_id,
@@ -125,17 +137,28 @@ async fn handle_incoming(
             });
         }
 
-        WSIncomingMessage::PlayWithBots { stake, currency, league, difficulty, max_eyes } => {
+        WSIncomingMessage::PlayWithBots {
+            stake,
+            currency,
+            league,
+            difficulty,
+            max_eyes,
+        } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
-                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    let _ = session
+                        .send(WSEvent::Error {
+                            detail: "Вы уже находитесь в игре или очереди".to_string(),
+                        })
+                        .await;
                     return;
                 }
             }
 
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::CreateBotRoom {
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::CreateBotRoom {
                     player: player_id,
                     key: QueueKey {
                         stake,
@@ -144,8 +167,7 @@ async fn handle_incoming(
                     },
                     difficulty,
                     max_eyes: max_eyes.unwrap_or(12),
-                },
-            );
+                });
         }
 
         WSIncomingMessage::CreateRoom {
@@ -158,14 +180,21 @@ async fn handle_incoming(
         } => {
             let stake_val = rust_decimal::prelude::ToPrimitive::to_i32(&stake).unwrap_or(0);
             if stake_val > 0 {
-                let check_coins = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", player_id)
-                    .fetch_one(&app_ctx.db_pool)
-                    .await;
+                let check_coins = sqlx::query!(
+                    "SELECT free_coins FROM users WHERE telegram_id = $1",
+                    player_id
+                )
+                .fetch_one(&app_ctx.db_pool)
+                .await;
                 match check_coins {
                     Ok(row) => {
                         if row.free_coins < stake_val {
                             if let Some(session) = connection_pool.get(&player_id) {
-                                let _ = session.send(WSEvent::Error { detail: "Недостаточно орехов для этой ставки".to_string() }).await;
+                                let _ = session
+                                    .send(WSEvent::Error {
+                                        detail: "Недостаточно орехов для этой ставки".to_string(),
+                                    })
+                                    .await;
                             }
                             return;
                         }
@@ -176,91 +205,99 @@ async fn handle_incoming(
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
-                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    let _ = session
+                        .send(WSEvent::Error {
+                            detail: "Вы уже находитесь в игре или очереди".to_string(),
+                        })
+                        .await;
                     return;
                 }
             }
 
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::CreateRoom {
-                    key: QueueKey {
-                        stake,
-                        currency,
-                        league,
-                    },
-                    name: name.clone(),
-                    players: vec![player_id],
-                    password_hash: password_hash.clone(),
-                    kind: if password_hash.is_some() {
-                        RoomKind::Private
-                    } else {
-                        RoomKind::Open
-                    },
-                    max_eyes: max_eyes.unwrap_or(12),
+            let _ = app_ctx.room_manager.send(RoomManagerCommand::CreateRoom {
+                key: QueueKey {
+                    stake,
+                    currency,
+                    league,
                 },
-            );
+                name: name.clone(),
+                players: vec![player_id],
+                password_hash: password_hash.clone(),
+                kind: if password_hash.is_some() {
+                    RoomKind::Private
+                } else {
+                    RoomKind::Open
+                },
+                max_eyes: max_eyes.unwrap_or(12),
+            });
         }
 
-        WSIncomingMessage::JoinRoom { room_id, password, target_bot_id } => {
+        WSIncomingMessage::JoinRoom {
+            room_id,
+            password,
+            target_bot_id,
+        } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
-                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    let _ = session
+                        .send(WSEvent::Error {
+                            detail: "Вы уже находитесь в игре или очереди".to_string(),
+                        })
+                        .await;
                     return;
                 }
             }
 
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::JoinRoom {
-                    player: player_id,
-                    room_id,
-                    password,
-                    target_bot_id,
-                },
-            );
+            let _ = app_ctx.room_manager.send(RoomManagerCommand::JoinRoom {
+                player: player_id,
+                room_id,
+                password,
+                target_bot_id,
+            });
         }
 
         WSIncomingMessage::LeaveRoom { room_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::LeaveRoom {
-                    player: player_id,
-                    room_id,
-                },
-            );
+            let _ = app_ctx.room_manager.send(RoomManagerCommand::LeaveRoom {
+                player: player_id,
+                room_id,
+            });
         }
 
         WSIncomingMessage::SurrenderRoom { room_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::SurrenderRoom {
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::SurrenderRoom {
                     player: player_id,
                     room_id,
-                },
-            );
+                });
         }
 
         WSIncomingMessage::SpectateRoom { room_id } => {
             if let Some(session) = connection_pool.get(&player_id) {
                 let status = session.status.read().await.clone();
                 if status != PlayerStatus::Connected {
-                    let _ = session.send(WSEvent::Error { detail: "Вы уже находитесь в игре или очереди".to_string() }).await;
+                    let _ = session
+                        .send(WSEvent::Error {
+                            detail: "Вы уже находитесь в игре или очереди".to_string(),
+                        })
+                        .await;
                     return;
                 }
             }
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::SpectateRoom {
-                    player: player_id,
-                    room_id,
-                },
-            );
+            let _ = app_ctx.room_manager.send(RoomManagerCommand::SpectateRoom {
+                player: player_id,
+                room_id,
+            });
         }
 
         WSIncomingMessage::UnspectateRoom { room_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::UnspectateRoom {
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::UnspectateRoom {
                     player: player_id,
                     room_id,
-                },
-            );
+                });
         }
 
         WSIncomingMessage::Ready { room_id } => {
@@ -273,90 +310,78 @@ async fn handle_incoming(
             }
         }
         WSIncomingMessage::SubscribeRooms => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::SubscribeRooms {
-                    player: player_id,
-                },
-            );
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::SubscribeRooms { player: player_id });
         }
 
         WSIncomingMessage::UnsubscribeRooms => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::UnsubscribeRooms {
-                    player: player_id,
-                },
-            );
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::UnsubscribeRooms { player: player_id });
         }
 
-        WSIncomingMessage::PlayCard { room_id, rank, suit } => {
-            match Card::build_from(rank, suit) {
-                Ok(card) => {
-                    let _ = app_ctx.room_manager.send(
-                        RoomManagerCommand::PlayCard {
-                            player: player_id,
-                            room_id,
-                            card,
-                        },
-                    );
-                }
-                Err(err_msg) => {
-                    if let Some(player) = connection_pool.get(&player_id) {
-                        let _ = player.send(
-                            WSEvent::Error {
-                                detail: err_msg.to_string(),
-                            },
-                        );
-                    }
+        WSIncomingMessage::PlayCard {
+            room_id,
+            rank,
+            suit,
+        } => match Card::build_from(rank, suit) {
+            Ok(card) => {
+                let _ = app_ctx.room_manager.send(RoomManagerCommand::PlayCard {
+                    player: player_id,
+                    room_id,
+                    card,
+                });
+            }
+            Err(err_msg) => {
+                if let Some(player) = connection_pool.get(&player_id) {
+                    let _ = player.send(WSEvent::Error {
+                        detail: err_msg.to_string(),
+                    });
                 }
             }
-        }
+        },
 
         WSIncomingMessage::SponsorPlayer { room_id, target_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::SponsorPlayer {
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::SponsorPlayer {
                     player: player_id,
                     room_id,
                     target_id,
-                }
-            );
+                });
         }
 
         WSIncomingMessage::Taunt { room_id, taunt_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::Taunt {
-                    player: player_id,
-                    room_id,
-                    taunt_id,
-                },
-            );
+            let _ = app_ctx.room_manager.send(RoomManagerCommand::Taunt {
+                player: player_id,
+                room_id,
+                taunt_id,
+            });
         }
 
         WSIncomingMessage::RequestToJoin { room_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::RequestToJoin {
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::RequestToJoin {
                     player: player_id,
                     room_id,
-                }
-            );
+                });
         }
 
         WSIncomingMessage::AcceptJoinRequest { room_id, target_id } => {
-            let _ = app_ctx.room_manager.send(
-                RoomManagerCommand::AcceptJoinRequest {
+            let _ = app_ctx
+                .room_manager
+                .send(RoomManagerCommand::AcceptJoinRequest {
                     host: player_id,
                     room_id,
                     target_id,
-                }
-            );
+                });
         }
     }
 }
 
-async fn handle_socket(
-    socket: WebSocket,
-    app_ctx: Arc<AppContext>,
-    player_id: i64,
-) {
+async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, player_id: i64) {
     let (mut write, mut read) = socket.split();
 
     let (tx, mut rx) = mpsc::unbounded_channel::<WSEvent>();
@@ -402,7 +427,6 @@ async fn handle_socket(
         },
     };
 
-
     let reconnect_room_id = if let Some(existing_player) = connection_pool.get(&player_id) {
         let status = {
             let guard = existing_player.status.read().await;
@@ -424,18 +448,16 @@ async fn handle_socket(
     connection_pool.pool(player_meta.clone(), tx.clone()).await;
 
     if let Some(room_id) = reconnect_room_id {
-        let _ = app_ctx.room_manager.send(
-            RoomManagerCommand::PlayerReconnect {
+        let _ = app_ctx
+            .room_manager
+            .send(RoomManagerCommand::PlayerReconnect {
                 player: player_id,
                 room_id,
-            }
-        );
+            });
     } else {
-        let _ = app_ctx.room_manager.send(
-            RoomManagerCommand::CheckGhostHandover {
-                player: player_id,
-            }
-        );
+        let _ = app_ctx
+            .room_manager
+            .send(RoomManagerCommand::CheckGhostHandover { player: player_id });
     }
     info!("{} connected to pool", player_id);
 
@@ -523,29 +545,32 @@ async fn handle_socket(
         match status {
             PlayerStatus::InGame { room_id, .. } => {
                 connection_pool.temp_disconnected(&player_id).await;
-                let _ = app_ctx.room_manager.send(
-                    RoomManagerCommand::PlayerTemporaryDisconnect { player: player_id, room_id: room_id.to_string() }
-                );
+                let _ = app_ctx
+                    .room_manager
+                    .send(RoomManagerCommand::PlayerTemporaryDisconnect {
+                        player: player_id,
+                        room_id: room_id.to_string(),
+                    });
             }
             PlayerStatus::Spectating { room_id } => {
-                let _ = app_ctx.room_manager.send(
-                    RoomManagerCommand::UnspectateRoom {
+                let _ = app_ctx
+                    .room_manager
+                    .send(RoomManagerCommand::UnspectateRoom {
                         player: player_id,
                         room_id,
-                    },
-                );
+                    });
                 connection_pool.disconnect(&player_id).await;
             }
             _ => {
-                let _ = app_ctx.queue_manager.send(
-                    QueueCommand::Disconnect { player: player_id }
-                );
-                let _ = app_ctx.room_manager.send(
-                    RoomManagerCommand::UnsubscribeRooms { player: player_id }
-                );
-                let _ = app_ctx.room_manager.send(
-                    RoomManagerCommand::LeaveAllRoom { player: player_id }
-                );
+                let _ = app_ctx
+                    .queue_manager
+                    .send(QueueCommand::Disconnect { player: player_id });
+                let _ = app_ctx
+                    .room_manager
+                    .send(RoomManagerCommand::UnsubscribeRooms { player: player_id });
+                let _ = app_ctx
+                    .room_manager
+                    .send(RoomManagerCommand::LeaveAllRoom { player: player_id });
                 connection_pool.disconnect(&player_id).await;
                 // connection_pool.remove(&player_id);
             }

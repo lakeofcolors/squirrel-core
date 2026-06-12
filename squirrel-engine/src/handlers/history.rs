@@ -1,8 +1,12 @@
-use axum::{extract::{Extension, Path}, http::StatusCode, Json};
-use serde::Serialize;
-use std::sync::Arc;
 use crate::{core::context::AppContext, utils::jwt::AuthUser};
+use axum::{
+    extract::{Extension, Path},
+    http::StatusCode,
+    Json,
+};
+use serde::Serialize;
 use sqlx::Row;
+use std::sync::Arc;
 
 #[derive(Serialize)]
 pub struct ReplayPlayer {
@@ -26,16 +30,21 @@ pub async fn get_match_replay(
 ) -> Result<Json<ReplayResponse>, (StatusCode, String)> {
     let pool = &app_ctx.db_pool;
 
-    let row = sqlx::query(
-        "SELECT replay_events FROM matches WHERE id = $1"
-    )
-    .bind(match_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query match".to_string()))?
-    .ok_or((StatusCode::NOT_FOUND, "Match not found".to_string()))?;
+    let row = sqlx::query("SELECT replay_events FROM matches WHERE id = $1")
+        .bind(match_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to query match".to_string(),
+            )
+        })?
+        .ok_or((StatusCode::NOT_FOUND, "Match not found".to_string()))?;
 
-    let replay_events: sqlx::types::Json<Vec<serde_json::Value>> = row.try_get("replay_events").unwrap_or_else(|_| sqlx::types::Json(vec![]));
+    let replay_events: sqlx::types::Json<Vec<serde_json::Value>> = row
+        .try_get("replay_events")
+        .unwrap_or_else(|_| sqlx::types::Json(vec![]));
 
     let players_rows = sqlx::query(
         r#"
@@ -43,18 +52,23 @@ pub async fn get_match_replay(
         FROM match_players mp
         LEFT JOIN users u ON u.telegram_id = mp.telegram_id
         WHERE mp.match_id = $1
-        "#
+        "#,
     )
     .bind(match_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch players".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to fetch players".to_string(),
+        )
+    })?;
 
     let mut players = Vec::new();
     for r in players_rows {
         let telegram_id: i64 = r.try_get("telegram_id").unwrap_or(0);
         let db_username: Option<String> = r.try_get("username").unwrap_or(None);
-        
+
         let final_username = db_username.or_else(|| {
             if telegram_id < 0 {
                 Some(format!("Bot {}", telegram_id.abs()))

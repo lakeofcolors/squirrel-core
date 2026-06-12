@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
-use std::collections::HashMap;
-use std::time::Instant;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
+use std::time::Instant;
+use tokio::sync::mpsc;
 
 // use crate::core::engine::GameEngine;
 
@@ -14,14 +14,13 @@ pub type RoomId = String;
 pub type RoomName = String;
 pub type PlayerId = i64;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct PlayerMeta{
+pub struct PlayerMeta {
     pub id: PlayerId,
     pub username: Option<String>,
     pub rating: i32,
     pub photo_url: Option<String>,
-    #[sqlx(default)] 
+    #[sqlx(default)]
     #[serde(default)]
     pub xp: i32,
     #[sqlx(default)]
@@ -58,7 +57,6 @@ pub enum RoomKind {
     TournamentMatch,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum League {
     Bronze,
@@ -71,21 +69,13 @@ pub enum League {
 pub struct QueueKey {
     pub stake: Decimal,
     pub currency: Currency,
-    pub league: League
+    pub league: League,
 }
 
 pub enum QueueCommand {
-    Enqueue {
-        player: PlayerId,
-        key: QueueKey,
-    },
-    Dequeue {
-        player: PlayerId,
-        key: QueueKey,
-    },
-    Disconnect {
-        player: PlayerId,
-    },
+    Enqueue { player: PlayerId, key: QueueKey },
+    Dequeue { player: PlayerId, key: QueueKey },
+    Disconnect { player: PlayerId },
 }
 
 #[derive(Debug)]
@@ -111,49 +101,141 @@ pub enum RoomManagerCommand {
         players: Vec<PlayerId>,
     },
     GhostBotTick,
-    InjectBotToRoom { room_id: RoomId },
-    JoinRoom { player: PlayerId, room_id: RoomId, password: Option<String>, target_bot_id: Option<i64> },
-    LeaveRoom { player: PlayerId, room_id: RoomId },
-    InvitePlayer { room_id: RoomId, inviter_id: PlayerId, target_id: PlayerId, target_bot_id: Option<i64> },
-    SurrenderRoom { player: PlayerId, room_id: RoomId },
-    SpectateRoom { player: PlayerId, room_id: RoomId },
-    UnspectateRoom { player: PlayerId, room_id: RoomId },
-    LeaveAllRoom { player: PlayerId },
-    FinishRoom{
-        room_id: RoomId
+    InjectBotToRoom {
+        room_id: RoomId,
     },
-    SubscribeRooms { player: PlayerId },
-    UnsubscribeRooms { player: PlayerId },
-    CheckGhostHandover { player: PlayerId },
+    JoinRoom {
+        player: PlayerId,
+        room_id: RoomId,
+        password: Option<String>,
+        target_bot_id: Option<i64>,
+    },
+    LeaveRoom {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    InvitePlayer {
+        room_id: RoomId,
+        inviter_id: PlayerId,
+        target_id: PlayerId,
+        target_bot_id: Option<i64>,
+    },
+    SurrenderRoom {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    SpectateRoom {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    UnspectateRoom {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    LeaveAllRoom {
+        player: PlayerId,
+    },
+    FinishRoom {
+        room_id: RoomId,
+    },
+    SubscribeRooms {
+        player: PlayerId,
+    },
+    UnsubscribeRooms {
+        player: PlayerId,
+    },
+    CheckGhostHandover {
+        player: PlayerId,
+    },
 
-    PlayCard{ player: PlayerId, room_id: RoomId, card: Card},
-    PlayerTemporaryDisconnect{ player: PlayerId, room_id: RoomId },
-    PlayerReconnect{ player: PlayerId, room_id: RoomId },
-    PlayerDisconnected { player: PlayerId, room_id: RoomId },
-    PlayerReady { player: PlayerId, room_id: RoomId },
-    Taunt { player: PlayerId, room_id: RoomId, taunt_id: String },
-    SponsorPlayer { player: PlayerId, room_id: RoomId, target_id: i64 },
-    RequestToJoin { player: PlayerId, room_id: RoomId },
-    AcceptJoinRequest { host: PlayerId, room_id: RoomId, target_id: PlayerId },
+    PlayCard {
+        player: PlayerId,
+        room_id: RoomId,
+        card: Card,
+    },
+    PlayerTemporaryDisconnect {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    PlayerReconnect {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    PlayerDisconnected {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    PlayerReady {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    Taunt {
+        player: PlayerId,
+        room_id: RoomId,
+        taunt_id: String,
+    },
+    SponsorPlayer {
+        player: PlayerId,
+        room_id: RoomId,
+        target_id: i64,
+    },
+    RequestToJoin {
+        player: PlayerId,
+        room_id: RoomId,
+    },
+    AcceptJoinRequest {
+        host: PlayerId,
+        room_id: RoomId,
+        target_id: PlayerId,
+    },
 }
 
 #[derive(Debug)]
-pub enum RoomActorCommand{
-    PlayCard{ player: PlayerId, card: Card, is_bot_move: bool },
-    PlayerTemporaryDisconnect{ player: PlayerId },
-    PlayerReconnect{ player: PlayerId },
-    PlayerDisconnected { player: PlayerId },
-    PlayerSurrendered { player: PlayerId },
-    AddSpectator { player: PlayerId },
-    RemoveSpectator { player: PlayerId },
-    PlayerReady { player: PlayerId },
+pub enum RoomActorCommand {
+    PlayCard {
+        player: PlayerId,
+        card: Card,
+        is_bot_move: bool,
+    },
+    PlayerTemporaryDisconnect {
+        player: PlayerId,
+    },
+    PlayerReconnect {
+        player: PlayerId,
+    },
+    PlayerDisconnected {
+        player: PlayerId,
+    },
+    PlayerSurrendered {
+        player: PlayerId,
+    },
+    AddSpectator {
+        player: PlayerId,
+    },
+    RemoveSpectator {
+        player: PlayerId,
+    },
+    PlayerReady {
+        player: PlayerId,
+    },
     ReadyTimeout,
-    TurnTimeout { player: PlayerId, turn: u64 },
-    Taunt { player: PlayerId, taunt_id: String },
-    SponsorPlayer { player: PlayerId, target_id: i64 },
-    ReplaceBot { old_id: PlayerId, new_player: PlayerMeta },
+    TurnTimeout {
+        player: PlayerId,
+        turn: u64,
+    },
+    Taunt {
+        player: PlayerId,
+        taunt_id: String,
+    },
+    SponsorPlayer {
+        player: PlayerId,
+        target_id: i64,
+    },
+    ReplaceBot {
+        old_id: PlayerId,
+        new_player: PlayerMeta,
+    },
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Room {
@@ -161,11 +243,11 @@ pub struct Room {
     pub password_hash: Option<Hash>,
     pub created_at: Instant,
     pub actor: Option<mpsc::UnboundedSender<RoomActorCommand>>,
-    pub invited_players: Vec<i64>
+    pub invited_players: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoomMeta{
+pub struct RoomMeta {
     pub id: RoomId,
     pub name: RoomName,
     pub key: QueueKey,
@@ -179,7 +261,6 @@ fn default_max_eyes() -> u16 {
     12
 }
 
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Suit {
     Clubs,
@@ -188,7 +269,7 @@ pub enum Suit {
     Spades,
 }
 
-impl Suit{
+impl Suit {
     pub fn random_suit() -> Suit {
         let suits = vec![Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades];
         let mut rng = thread_rng();
@@ -209,8 +290,8 @@ pub enum Rank {
 }
 
 impl Rank {
-    fn power(&self) -> u8{
-        match self{
+    fn power(&self) -> u8 {
+        match self {
             Rank::Ace => 7,
             Rank::Ten => 6,
             Rank::King => 5,
@@ -229,7 +310,6 @@ pub struct Card {
     pub rank: Rank,
 }
 
-
 impl Card {
     pub fn points(&self) -> u8 {
         match self.rank {
@@ -241,8 +321,8 @@ impl Card {
             _ => 0,
         }
     }
-    pub fn build_from(rank: String, suit: String) -> Result<Self, &'static str>{
-        let card = Self{
+    pub fn build_from(rank: String, suit: String) -> Result<Self, &'static str> {
+        let card = Self {
             rank: match rank.to_lowercase().as_str() {
                 "7" => Rank::Seven,
                 "8" => Rank::Eight,
@@ -252,19 +332,19 @@ impl Card {
                 "q" => Rank::Queen,
                 "k" => Rank::King,
                 "a" => Rank::Ace,
-                _ => return Err("Invalid rank")
+                _ => return Err("Invalid rank"),
             },
             suit: match suit.to_lowercase().as_str() {
                 "c" => Suit::Clubs,
                 "d" => Suit::Diamonds,
                 "h" => Suit::Hearts,
                 "s" => Suit::Spades,
-                _ => return Err("Invalid suit")
-            }
+                _ => return Err("Invalid suit"),
+            },
         };
         Ok(card)
     }
-    pub fn power(&self, lead: Suit, trump: Suit) -> u16{
+    pub fn power(&self, lead: Suit, trump: Suit) -> u16 {
         if self.rank == Rank::Jack {
             return 1000 + jack_priority(self.suit) as u16;
         }
@@ -316,7 +396,6 @@ pub fn jack_priority(suit: Suit) -> u8 {
         Suit::Diamonds => 1,
     }
 }
-
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum PlayerPosition {
@@ -399,9 +478,14 @@ impl GameState {
         }
     }
 
-    pub fn find_club_jack_owner(hands: HashMap<PlayerPosition, Vec<Card>>) -> Option<PlayerPosition> {
+    pub fn find_club_jack_owner(
+        hands: HashMap<PlayerPosition, Vec<Card>>,
+    ) -> Option<PlayerPosition> {
         for (pos, hand) in hands {
-            if hand.contains(&Card { suit: Suit::Clubs, rank: Rank::Jack }) {
+            if hand.contains(&Card {
+                suit: Suit::Clubs,
+                rank: Rank::Jack,
+            }) {
                 return Some(pos);
             }
         }
@@ -413,12 +497,14 @@ impl GameState {
         self.trump = *self.player_trump_map.get(&owner).unwrap();
     }
 
-    pub fn update_round_attacking_team(&mut self){
+    pub fn update_round_attacking_team(&mut self) {
         if let Some(owner) = Self::find_club_jack_owner(self.hands.clone()) {
             self.attacking_team = owner.team();
         }
     }
-    fn assign_player_trumps(hands: HashMap<PlayerPosition, Vec<Card>>) ->  HashMap<PlayerPosition, Suit> {
+    fn assign_player_trumps(
+        hands: HashMap<PlayerPosition, Vec<Card>>,
+    ) -> HashMap<PlayerPosition, Suit> {
         let owner = Self::find_club_jack_owner(hands).unwrap();
         let mut player_trump_map = HashMap::new();
         let order = [
@@ -428,12 +514,7 @@ impl GameState {
             owner.next().next().next(),
         ];
 
-        let suits = [
-            Suit::Clubs,
-            Suit::Hearts,
-            Suit::Spades,
-            Suit::Diamonds,
-        ];
+        let suits = [Suit::Clubs, Suit::Hearts, Suit::Spades, Suit::Diamonds];
 
         for (pos, suit) in order.iter().zip(suits.iter()) {
             player_trump_map.insert(*pos, *suit);
@@ -441,7 +522,7 @@ impl GameState {
         player_trump_map
     }
 
-    pub fn update_hands(&mut self){
+    pub fn update_hands(&mut self) {
         let hands_vec = deal_cards();
         let mut new_hands = HashMap::new();
         new_hands.insert(PlayerPosition::North, hands_vec[0].clone());
@@ -451,12 +532,12 @@ impl GameState {
 
         self.club_jack_owner = Self::find_club_jack_owner(new_hands.clone()).unwrap();
         self.hands = new_hands;
-        
+
         self.round_start_turn = self.round_start_turn.next();
         self.current_turn = self.round_start_turn;
     }
 
-    pub fn update_team_score_afrer_round(&mut self){
+    pub fn update_team_score_afrer_round(&mut self) {
         *self.team_scores.get_mut(&Team::Kaskyr).unwrap() = 0;
         *self.team_scores.get_mut(&Team::Uzi).unwrap() = 0;
     }
@@ -466,7 +547,11 @@ impl GameState {
         let b = self.team_scores.get(&Team::Uzi).copied().unwrap_or(0);
 
         if a == 60 && b == 60 {
-            self.attacking_team = if self.attacking_team == Team::Kaskyr { Team::Uzi } else { Team::Kaskyr };
+            self.attacking_team = if self.attacking_team == Team::Kaskyr {
+                Team::Uzi
+            } else {
+                Team::Kaskyr
+            };
             self.eggs_active = true;
             return None;
         }
@@ -492,9 +577,9 @@ impl GameState {
 
         let mut eyes = 1;
 
-        if self.is_first_round{
+        if self.is_first_round {
             eyes = 2
-        }else{
+        } else {
             if loser_score < 30 {
                 eyes = 2;
             }
@@ -511,12 +596,11 @@ impl GameState {
 
         let entry = self.team_eye.entry(winner).or_insert(0);
         *entry += eyes;
-        
+
         self.is_first_round = false;
 
         Some(winner)
     }
-
 
     pub fn play_card(&mut self, player: PlayerPosition, card: Card) -> Result<(), &'static str> {
         if self.paused {
@@ -582,7 +666,6 @@ impl GameState {
             }
         }
 
-
         hand.retain(|&c| c != card);
         self.current_trick.push((player, card));
         if self.current_trick.len() < 4 {
@@ -590,7 +673,6 @@ impl GameState {
         }
         Ok(())
     }
-
 
     pub fn resolve_trick(&mut self) -> Option<PlayerPosition> {
         if self.current_trick.len() > 0 {
@@ -606,8 +688,8 @@ impl GameState {
         let lead_card = self.current_trick[0].1;
         let trump = self.trump;
 
-
-        let winner = self.current_trick
+        let winner = self
+            .current_trick
             .iter()
             .max_by_key(|(_, card)| card.power(lead_card.suit, trump))
             .map(|(pos, _)| *pos)
@@ -649,36 +731,88 @@ pub struct GameSnapshot {
     pub scores: HashMap<Team, u16>,
     pub current_turn: PlayerPosition,
     pub current_trick: Vec<(PlayerPosition, Card)>,
-    pub last_trick: Vec<(PlayerPosition, Card)>
+    pub last_trick: Vec<(PlayerPosition, Card)>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum WSEvent {
-    RoomsSnapshot{ items: Vec<RoomMeta> },
-    RoomCreated { room: RoomMeta },
-    RoomUpdated { room: RoomMeta },
-    RoomRemoved { room_id: RoomId },
+    RoomsSnapshot {
+        items: Vec<RoomMeta>,
+    },
+    RoomCreated {
+        room: RoomMeta,
+    },
+    RoomUpdated {
+        room: RoomMeta,
+    },
+    RoomRemoved {
+        room_id: RoomId,
+    },
 
-    PlayerDisconnected { position: PlayerPosition },
-    PlayerReconnected { position: PlayerPosition },
-    SpectatorCountUpdated { count: usize },
-    SuccessLogin{ username: String },
-    GameSnapshot (GameSnapshot),
-    GameInvite { room_id: RoomId, room_name: Option<String>, from: PlayerMeta, target_bot_id: Option<i64> },
-    GameClose{reason: String},
-    YourHand{cards: Vec<Card>},
-    CardPlayed{position: PlayerPosition, card: Card},
-    TrickWon{position: PlayerPosition, team: Team},
-    GameOver{scores: HashMap<Team, u16>}, // team_id -> score
-    Error{detail: String},
-    ReadyCheckStarted { expires_at: u64, room_id: RoomId, players: Vec<PlayerMeta> },
-    ReadyCheckUpdate { ready_players: Vec<PlayerId> },
-    Taunt { position: PlayerPosition, taunt_id: String },
-    SponsorAction { from_id: i64, to_id: i64 },
-    GameHint { card: Option<Card>, reason: String },
-    JoinRequest { room_id: RoomId, from: PlayerMeta },
+    PlayerDisconnected {
+        position: PlayerPosition,
+    },
+    PlayerReconnected {
+        position: PlayerPosition,
+    },
+    SpectatorCountUpdated {
+        count: usize,
+    },
+    SuccessLogin {
+        username: String,
+    },
+    GameSnapshot(GameSnapshot),
+    GameInvite {
+        room_id: RoomId,
+        room_name: Option<String>,
+        from: PlayerMeta,
+        target_bot_id: Option<i64>,
+    },
+    GameClose {
+        reason: String,
+    },
+    YourHand {
+        cards: Vec<Card>,
+    },
+    CardPlayed {
+        position: PlayerPosition,
+        card: Card,
+    },
+    TrickWon {
+        position: PlayerPosition,
+        team: Team,
+    },
+    GameOver {
+        scores: HashMap<Team, u16>,
+    }, // team_id -> score
+    Error {
+        detail: String,
+    },
+    ReadyCheckStarted {
+        expires_at: u64,
+        room_id: RoomId,
+        players: Vec<PlayerMeta>,
+    },
+    ReadyCheckUpdate {
+        ready_players: Vec<PlayerId>,
+    },
+    Taunt {
+        position: PlayerPosition,
+        taunt_id: String,
+    },
+    SponsorAction {
+        from_id: i64,
+        to_id: i64,
+    },
+    GameHint {
+        card: Option<Card>,
+        reason: String,
+    },
+    JoinRequest {
+        room_id: RoomId,
+        from: PlayerMeta,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -686,7 +820,7 @@ pub enum WSEvent {
 pub enum GameReplayEvent {
     RoundStart {
         hands: HashMap<String, Vec<Card>>,
-        player_trumps: HashMap<String, Suit>
+        player_trumps: HashMap<String, Suit>,
     },
     PlayCard {
         position: PlayerPosition,
@@ -719,26 +853,79 @@ pub struct SubManageMsg {
     pub suit: Option<String>,
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
 pub enum WSIncomingMessage {
-    FindGame{stake: Decimal, currency: Currency, league: League},
-    CancelSearch{stake: Decimal, currency: Currency, league: League},
-    PlayWithBots{stake: Decimal, currency: Currency, league: League, difficulty: BotDifficulty, max_eyes: Option<u16>},
-    CreateRoom{stake: Decimal, currency: Currency, league: League, name: Option<String>, password_hash: Option<Hash>, max_eyes: Option<u16>},
-    InviteFriend{room_id: RoomId, friend_id: i64, target_bot_id: Option<i64>},
-    JoinRoom { room_id: RoomId, password: Option<String>, target_bot_id: Option<i64> },
-    LeaveRoom { room_id: RoomId },
-    SurrenderRoom { room_id: RoomId },
-    SpectateRoom { room_id: RoomId },
-    UnspectateRoom { room_id: RoomId },
-    Ready { room_id: RoomId },
+    FindGame {
+        stake: Decimal,
+        currency: Currency,
+        league: League,
+    },
+    CancelSearch {
+        stake: Decimal,
+        currency: Currency,
+        league: League,
+    },
+    PlayWithBots {
+        stake: Decimal,
+        currency: Currency,
+        league: League,
+        difficulty: BotDifficulty,
+        max_eyes: Option<u16>,
+    },
+    CreateRoom {
+        stake: Decimal,
+        currency: Currency,
+        league: League,
+        name: Option<String>,
+        password_hash: Option<Hash>,
+        max_eyes: Option<u16>,
+    },
+    InviteFriend {
+        room_id: RoomId,
+        friend_id: i64,
+        target_bot_id: Option<i64>,
+    },
+    JoinRoom {
+        room_id: RoomId,
+        password: Option<String>,
+        target_bot_id: Option<i64>,
+    },
+    LeaveRoom {
+        room_id: RoomId,
+    },
+    SurrenderRoom {
+        room_id: RoomId,
+    },
+    SpectateRoom {
+        room_id: RoomId,
+    },
+    UnspectateRoom {
+        room_id: RoomId,
+    },
+    Ready {
+        room_id: RoomId,
+    },
     SubscribeRooms,
     UnsubscribeRooms,
-    PlayCard{room_id: RoomId, rank: String, suit: String},
-    SponsorPlayer { room_id: RoomId, target_id: i64 },
-    Taunt{room_id: RoomId, taunt_id: String},
-    RequestToJoin { room_id: RoomId },
-    AcceptJoinRequest { room_id: RoomId, target_id: i64 },
+    PlayCard {
+        room_id: RoomId,
+        rank: String,
+        suit: String,
+    },
+    SponsorPlayer {
+        room_id: RoomId,
+        target_id: i64,
+    },
+    Taunt {
+        room_id: RoomId,
+        taunt_id: String,
+    },
+    RequestToJoin {
+        room_id: RoomId,
+    },
+    AcceptJoinRequest {
+        room_id: RoomId,
+        target_id: i64,
+    },
 }

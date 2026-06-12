@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, StatusCode},
@@ -6,7 +7,6 @@ use jsonwebtoken::EncodingKey;
 use jsonwebtoken::{decode, encode, errors::Error, Algorithm, DecodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use async_trait::async_trait;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -28,25 +28,29 @@ where
 {
     type Rejection = (StatusCode, String);
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        let auth_header = parts
-            .headers
-            .get(AUTHORIZATION)
-            .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let auth_header = parts.headers.get(AUTHORIZATION).ok_or((
+            StatusCode::UNAUTHORIZED,
+            "Missing Authorization header".to_string(),
+        ))?;
 
-        let auth_str = auth_header
-            .to_str()
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid Authorization header".to_string()))?;
+        let auth_str = auth_header.to_str().map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid Authorization header".to_string(),
+            )
+        })?;
 
         let token = auth_str
             .strip_prefix("Bearer ")
             .ok_or((StatusCode::UNAUTHORIZED, "Invalid Bearer token".to_string()))?;
 
-        let claims = validate_token(token)
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token".to_string()))?;
+        let claims = validate_token(token).map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired token".to_string(),
+            )
+        })?;
 
         Ok(AuthUser {
             telegram_id: claims.sub,

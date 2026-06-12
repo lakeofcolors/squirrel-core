@@ -1,8 +1,16 @@
-use axum::{extract::{Extension, Path}, http::StatusCode, Json};
+use crate::{
+    core::context::AppContext,
+    utils::crypto::{decrypt_message, encrypt_message},
+    utils::jwt::AuthUser,
+};
+use axum::{
+    extract::{Extension, Path},
+    http::StatusCode,
+    Json,
+};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use crate::{core::context::AppContext, utils::jwt::AuthUser, utils::crypto::{encrypt_message, decrypt_message}};
 use sqlx::Row;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct CreateClanRequest {
@@ -49,39 +57,73 @@ pub async fn create_clan(
 
     let tag_upper = req.tag.to_uppercase();
     if req.name.trim().is_empty() || tag_upper.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "Name and tag cannot be empty".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Name and tag cannot be empty".to_string(),
+        ));
     }
     if tag_upper.len() > 5 {
-        return Err((StatusCode::BAD_REQUEST, "Tag cannot be longer than 5 characters".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Tag cannot be longer than 5 characters".to_string(),
+        ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
-
-    // Check if user is already in a clan
-    let existing_membership = sqlx::query!("SELECT clan_id FROM clan_members WHERE telegram_id = $1", telegram_id)
-        .fetch_optional(&mut *tx)
+    let mut tx = pool
+        .begin()
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
+    // Check if user is already in a clan
+    let existing_membership = sqlx::query!(
+        "SELECT clan_id FROM clan_members WHERE telegram_id = $1",
+        telegram_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+
     if existing_membership.is_some() {
-        return Err((StatusCode::BAD_REQUEST, "You are already in a clan".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "You are already in a clan".to_string(),
+        ));
     }
 
     // Check nuts balance (Cost: 10,000)
-    let user_row = sqlx::query!("SELECT free_coins FROM users WHERE telegram_id = $1", telegram_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "User not found".to_string()))?;
+    let user_row = sqlx::query!(
+        "SELECT free_coins FROM users WHERE telegram_id = $1",
+        telegram_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "User not found".to_string(),
+        )
+    })?;
 
     if user_row.free_coins < 10000 {
-        return Err((StatusCode::BAD_REQUEST, "Not enough nuts (10,000 required)".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Not enough nuts (10,000 required)".to_string(),
+        ));
     }
 
     // Deduct nuts
-    sqlx::query!("UPDATE users SET free_coins = free_coins - 10000 WHERE telegram_id = $1", telegram_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to deduct nuts".to_string()))?;
+    sqlx::query!(
+        "UPDATE users SET free_coins = free_coins - 10000 WHERE telegram_id = $1",
+        telegram_id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to deduct nuts".to_string(),
+        )
+    })?;
 
     // Create clan
     let clan_row = sqlx::query(
@@ -99,13 +141,24 @@ pub async fn create_clan(
     // Add user as leader
     sqlx::query!(
         "INSERT INTO clan_members (clan_id, telegram_id, role) VALUES ($1, $2, 'leader')",
-        clan_id, telegram_id
+        clan_id,
+        telegram_id
     )
     .execute(&mut *tx)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to add clan member".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to add clan member".to_string(),
+        )
+    })?;
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to commit".to_string()))?;
+    tx.commit().await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to commit".to_string(),
+        )
+    })?;
 
     let clan = ClanDto {
         id: clan_id,
@@ -132,7 +185,7 @@ pub async fn get_clans(
         FROM clans c
         ORDER BY c.rating DESC, c.trophies DESC
         LIMIT 50
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
@@ -166,7 +219,7 @@ pub async fn get_clan_details(
                (SELECT COUNT(*) FROM clan_members WHERE clan_id = c.id) as members_count
         FROM clans c
         WHERE c.id = $1
-        "#
+        "#,
     )
     .bind(clan_id)
     .fetch_optional(pool)
@@ -191,7 +244,7 @@ pub async fn get_clan_details(
             JOIN users u ON u.telegram_id = cm.telegram_id
             WHERE cm.clan_id = $1
             ORDER BY u.rating DESC
-            "#
+            "#,
         )
         .bind(clan_id)
         .fetch_all(pool)
@@ -202,7 +255,9 @@ pub async fn get_clan_details(
         for m_row in member_rows {
             members.push(ClanMemberDto {
                 telegram_id: m_row.try_get("telegram_id").unwrap_or(0),
-                username: m_row.try_get("username").unwrap_or_else(|_| "Squirrel".into()),
+                username: m_row
+                    .try_get("username")
+                    .unwrap_or_else(|_| "Squirrel".into()),
                 avatar: m_row.try_get("avatar").unwrap_or_default(),
                 role: m_row.try_get("role").unwrap_or_else(|_| "member".into()),
                 rating: m_row.try_get("rating").unwrap_or(0),
@@ -223,13 +278,19 @@ pub async fn join_clan(
     let telegram_id = auth_user.telegram_id;
     let pool = &app_ctx.db_pool;
 
-    let existing_membership = sqlx::query!("SELECT clan_id FROM clan_members WHERE telegram_id = $1", telegram_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+    let existing_membership = sqlx::query!(
+        "SELECT clan_id FROM clan_members WHERE telegram_id = $1",
+        telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
     if existing_membership.is_some() {
-        return Err((StatusCode::BAD_REQUEST, "You are already in a clan".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "You are already in a clan".to_string(),
+        ));
     }
 
     let clan_exists = sqlx::query!("SELECT id FROM clans WHERE id = $1", clan_id)
@@ -243,11 +304,17 @@ pub async fn join_clan(
 
     sqlx::query!(
         "INSERT INTO clan_members (clan_id, telegram_id, role) VALUES ($1, $2, 'member')",
-        clan_id, telegram_id
+        clan_id,
+        telegram_id
     )
     .execute(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to join clan".to_string()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to join clan".to_string(),
+        )
+    })?;
 
     Ok(Json(()))
 }
@@ -259,22 +326,31 @@ pub async fn leave_clan(
     let telegram_id = auth_user.telegram_id;
     let pool = &app_ctx.db_pool;
 
-    let existing_membership = sqlx::query!("SELECT clan_id, role FROM clan_members WHERE telegram_id = $1", telegram_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+    let existing_membership = sqlx::query!(
+        "SELECT clan_id, role FROM clan_members WHERE telegram_id = $1",
+        telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
     if let Some(membership) = existing_membership {
         if membership.role == "leader" {
             // Need logic to pass leadership or dissolve clan. Let's simplify: dissolve if leader leaves.
             // Or just block leader from leaving unless they are the last member.
-            let count = sqlx::query!("SELECT COUNT(*) as c FROM clan_members WHERE clan_id = $1", membership.clan_id)
-                .fetch_one(pool)
-                .await
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
-            
+            let count = sqlx::query!(
+                "SELECT COUNT(*) as c FROM clan_members WHERE clan_id = $1",
+                membership.clan_id
+            )
+            .fetch_one(pool)
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+
             if count.c.unwrap_or(0) > 1 {
-                return Err((StatusCode::BAD_REQUEST, "Leader must transfer ownership before leaving".to_string()));
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Leader must transfer ownership before leaving".to_string(),
+                ));
             } else {
                 // Delete clan
                 sqlx::query!("DELETE FROM clans WHERE id = $1", membership.clan_id)
@@ -285,10 +361,18 @@ pub async fn leave_clan(
             }
         }
 
-        sqlx::query!("DELETE FROM clan_members WHERE telegram_id = $1", telegram_id)
-            .execute(pool)
-            .await
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to leave clan".to_string()))?;
+        sqlx::query!(
+            "DELETE FROM clan_members WHERE telegram_id = $1",
+            telegram_id
+        )
+        .execute(pool)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to leave clan".to_string(),
+            )
+        })?;
 
         Ok(Json(()))
     } else {
@@ -382,8 +466,13 @@ pub async fn get_tournament_details(
 ) -> Result<Json<TournamentDetailDto>, (StatusCode, String)> {
     let pool = &app_ctx.db_pool;
 
-    let t = sqlx::query!("SELECT id, title, start_time, end_time, status FROM tournaments WHERE id = $1", tournament_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
+    let t = sqlx::query!(
+        "SELECT id, title, start_time, end_time, status FROM tournaments WHERE id = $1",
+        tournament_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB Error".to_string()))?;
 
     let t = match t {
         Some(t) => t,
@@ -391,23 +480,31 @@ pub async fn get_tournament_details(
     };
 
     // Find my clan
-    let my_clan = sqlx::query!("SELECT clan_id FROM clan_members WHERE telegram_id = $1", auth_user.telegram_id)
-        .fetch_optional(pool).await.unwrap_or(None);
+    let my_clan = sqlx::query!(
+        "SELECT clan_id FROM clan_members WHERE telegram_id = $1",
+        auth_user.telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
 
     let mut my_clan_registration = None;
 
     if let Some(c) = my_clan {
         let reg = sqlx::query!("SELECT id, registered_at FROM tournament_registrations WHERE tournament_id = $1 AND clan_id = $2", tournament_id, c.clan_id)
             .fetch_optional(pool).await.unwrap_or(None);
-        
+
         if let Some(r) = reg {
             let squad_rows = sqlx::query!("SELECT telegram_id, is_substitute FROM tournament_squads WHERE registration_id = $1", r.id)
                 .fetch_all(pool).await.unwrap_or_default();
-            
-            let squad = squad_rows.into_iter().map(|sr| TournamentSquadMemberDto {
-                telegram_id: sr.telegram_id.unwrap_or(0),
-                is_substitute: sr.is_substitute,
-            }).collect();
+
+            let squad = squad_rows
+                .into_iter()
+                .map(|sr| TournamentSquadMemberDto {
+                    telegram_id: sr.telegram_id.unwrap_or(0),
+                    is_substitute: sr.is_substitute,
+                })
+                .collect();
 
             my_clan_registration = Some(TournamentRegistrationDto {
                 clan_id: c.clan_id,
@@ -419,16 +516,19 @@ pub async fn get_tournament_details(
 
     let matches_rows = sqlx::query!("SELECT id, round, match_index, clan1_id, clan2_id, winner_id, room_id FROM tournament_matches WHERE tournament_id = $1 ORDER BY round ASC, match_index ASC", tournament_id)
         .fetch_all(pool).await.unwrap_or_default();
-    
-    let matches = matches_rows.into_iter().map(|m| TournamentMatchDto {
-        id: m.id,
-        round: m.round,
-        match_index: m.match_index,
-        clan1_id: m.clan1_id,
-        clan2_id: m.clan2_id,
-        winner_id: m.winner_id,
-        room_id: m.room_id,
-    }).collect();
+
+    let matches = matches_rows
+        .into_iter()
+        .map(|m| TournamentMatchDto {
+            id: m.id,
+            round: m.round,
+            match_index: m.match_index,
+            clan1_id: m.clan1_id,
+            clan2_id: m.clan2_id,
+            winner_id: m.winner_id,
+            room_id: m.room_id,
+        })
+        .collect();
 
     Ok(Json(TournamentDetailDto {
         id: t.id,
@@ -454,34 +554,58 @@ pub async fn register_for_tournament(
     Json(payload): Json<RegisterTournamentRequest>,
 ) -> Result<impl axum::response::IntoResponse, (StatusCode, String)> {
     let pool = &app_ctx.db_pool;
-    
+
     if payload.main_squad.len() != 2 {
-        return Err((StatusCode::BAD_REQUEST, "В основном составе должно быть ровно 2 игрока".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "В основном составе должно быть ровно 2 игрока".to_string(),
+        ));
     }
     if payload.substitutes.len() > 4 {
-        return Err((StatusCode::BAD_REQUEST, "Запасных игроков может быть не больше 4".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Запасных игроков может быть не больше 4".to_string(),
+        ));
     }
 
     let my_id = auth_user.telegram_id;
 
-    let t = sqlx::query!("SELECT status FROM tournaments WHERE id = $1", tournament_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
-    
+    let t = sqlx::query!(
+        "SELECT status FROM tournaments WHERE id = $1",
+        tournament_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+
     if let Some(t) = t {
         if t.status != "upcoming" {
-            return Err((StatusCode::BAD_REQUEST, "Регистрация возможна только на будущие турниры".into()));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Регистрация возможна только на будущие турниры".into(),
+            ));
         }
     } else {
         return Err((StatusCode::NOT_FOUND, "Турнир не найден".into()));
     }
 
     // Am I clan leader?
-    let my_membership = sqlx::query!("SELECT clan_id, role FROM clan_members WHERE telegram_id = $1", my_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let my_membership = sqlx::query!(
+        "SELECT clan_id, role FROM clan_members WHERE telegram_id = $1",
+        my_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     let clan_id = match my_membership {
         Some(m) if m.role == "leader" => m.clan_id,
-        Some(_) => return Err((StatusCode::FORBIDDEN, "Только лидер клана может зарегистрировать состав".into())),
+        Some(_) => {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "Только лидер клана может зарегистрировать состав".into(),
+            ))
+        }
         None => return Err((StatusCode::FORBIDDEN, "Вы не состоите в клане".into())),
     };
 
@@ -491,14 +615,26 @@ pub async fn register_for_tournament(
 
     let in_clan_count = sqlx::query!(
         "SELECT COUNT(*) FROM clan_members WHERE clan_id = $1 AND telegram_id = ANY($2)",
-        clan_id, &all_players
-    ).fetch_one(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?.count.unwrap_or(0);
+        clan_id,
+        &all_players
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?
+    .count
+    .unwrap_or(0);
 
     if in_clan_count as usize != all_players.len() {
-        return Err((StatusCode::BAD_REQUEST, "Все заявленные игроки должны состоять в вашем клане".into()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Все заявленные игроки должны состоять в вашем клане".into(),
+        ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     let reg_id = sqlx::query!("INSERT INTO tournament_registrations (tournament_id, clan_id) VALUES ($1, $2) RETURNING id", tournament_id, clan_id)
         .fetch_one(&mut *tx).await.map_err(|_| (StatusCode::BAD_REQUEST, "Ваш клан уже зарегистрирован на этот турнир".into()))?.id;
@@ -512,7 +648,9 @@ pub async fn register_for_tournament(
             .execute(&mut *tx).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
     }
 
-    tx.commit().await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    tx.commit()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     Ok((StatusCode::OK, Json(serde_json::json!({"success": true}))))
 }
@@ -544,8 +682,14 @@ pub async fn get_clan_chat(
     let pool = &app_ctx.db_pool;
 
     // Verify membership
-    let membership = sqlx::query!("SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, auth_user.telegram_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let membership = sqlx::query!(
+        "SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+        clan_id,
+        auth_user.telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     if membership.is_none() {
         return Err((StatusCode::FORBIDDEN, "You are not in this clan".into()));
@@ -570,7 +714,8 @@ pub async fn get_clan_chat(
     let mut messages = vec![];
 
     for row in rows {
-        let decrypted = decrypt_message(&row.message, &secret).unwrap_or_else(|_| "[Ошибка расшифровки]".into());
+        let decrypted = decrypt_message(&row.message, &secret)
+            .unwrap_or_else(|_| "[Ошибка расшифровки]".into());
         messages.push(ClanMessageDto {
             id: row.id,
             sender_id: row.sender_id.unwrap_or(0),
@@ -600,8 +745,14 @@ pub async fn send_clan_message(
     }
 
     // Verify membership
-    let membership = sqlx::query!("SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, auth_user.telegram_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let membership = sqlx::query!(
+        "SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+        clan_id,
+        auth_user.telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     if membership.is_none() {
         return Err((StatusCode::FORBIDDEN, "You are not in this clan".into()));
@@ -612,11 +763,18 @@ pub async fn send_clan_message(
 
     sqlx::query!(
         "INSERT INTO clan_messages (clan_id, sender_id, message) VALUES ($1, $2, $3)",
-        clan_id, auth_user.telegram_id, encrypted
+        clan_id,
+        auth_user.telegram_id,
+        encrypted
     )
     .execute(pool)
     .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send message".into()))?;
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to send message".into(),
+        )
+    })?;
 
     Ok(Json(()))
 }
@@ -639,26 +797,53 @@ pub async fn change_member_role(
     }
 
     // Am I leader?
-    let my_membership = sqlx::query!("SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, auth_user.telegram_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let my_membership = sqlx::query!(
+        "SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+        clan_id,
+        auth_user.telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     match my_membership {
-        Some(m) if m.role == "leader" => {},
-        _ => return Err((StatusCode::FORBIDDEN, "Только лидер может изменять роли".into())),
+        Some(m) if m.role == "leader" => {}
+        _ => {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "Только лидер может изменять роли".into(),
+            ))
+        }
     }
 
     // Is target in clan?
-    let target_membership = sqlx::query!("SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, target_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let target_membership = sqlx::query!(
+        "SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+        clan_id,
+        target_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     if let Some(tm) = target_membership {
         if tm.role == "leader" {
-            return Err((StatusCode::BAD_REQUEST, "Нельзя изменить роль лидера".into()));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Нельзя изменить роль лидера".into(),
+            ));
         }
 
-        sqlx::query!("UPDATE clan_members SET role = $1 WHERE clan_id = $2 AND telegram_id = $3", payload.role, clan_id, target_id)
-            .execute(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
-        
+        sqlx::query!(
+            "UPDATE clan_members SET role = $1 WHERE clan_id = $2 AND telegram_id = $3",
+            payload.role,
+            clan_id,
+            target_id
+        )
+        .execute(pool)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+
         Ok(Json(()))
     } else {
         Err((StatusCode::NOT_FOUND, "Участник не найден в клане".into()))
@@ -673,8 +858,14 @@ pub async fn kick_member(
     let pool = &app_ctx.db_pool;
 
     // My role
-    let my_membership = sqlx::query!("SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, auth_user.telegram_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let my_membership = sqlx::query!(
+        "SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+        clan_id,
+        auth_user.telegram_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     let my_role = match my_membership {
         Some(m) => m.role,
@@ -682,27 +873,44 @@ pub async fn kick_member(
     };
 
     if my_role == "member" {
-        return Err((StatusCode::FORBIDDEN, "У вас нет прав исключать участников".into()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "У вас нет прав исключать участников".into(),
+        ));
     }
 
     // Target role
-    let target_membership = sqlx::query!("SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, target_id)
-        .fetch_optional(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+    let target_membership = sqlx::query!(
+        "SELECT role FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+        clan_id,
+        target_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
 
     if let Some(tm) = target_membership {
         if tm.role == "leader" {
             return Err((StatusCode::BAD_REQUEST, "Нельзя исключить лидера".into()));
         }
         if my_role == "officer" && tm.role == "officer" {
-            return Err((StatusCode::FORBIDDEN, "Офицер не может исключить другого офицера".into()));
+            return Err((
+                StatusCode::FORBIDDEN,
+                "Офицер не может исключить другого офицера".into(),
+            ));
         }
 
-        sqlx::query!("DELETE FROM clan_members WHERE clan_id = $1 AND telegram_id = $2", clan_id, target_id)
-            .execute(pool).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
-        
+        sqlx::query!(
+            "DELETE FROM clan_members WHERE clan_id = $1 AND telegram_id = $2",
+            clan_id,
+            target_id
+        )
+        .execute(pool)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "DB error".into()))?;
+
         Ok(Json(()))
     } else {
         Err((StatusCode::NOT_FOUND, "Участник не найден в клане".into()))
     }
 }
-
