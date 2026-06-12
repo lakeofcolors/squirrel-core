@@ -55,7 +55,7 @@ lint-admin:
     - echo "Installing Ruff python linter..."
     - pip install ruff
     - echo "Running Ruff checks on Django Admin panel..."
-    - ruff check squirrel-admin
+    - python3 -m ruff check squirrel-admin
   rules:
     - changes:
         - squirrel-admin/**/*
