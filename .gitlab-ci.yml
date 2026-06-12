@@ -28,8 +28,9 @@ lint-admin:
   stage: lint
   script:
     - echo "Running Ruff checks on Django Admin panel inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app python:3.11-slim sh -c "pip install ruff && python3 -m ruff check squirrel-admin"
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app python:3.11-slim sh -c "pip install ruff && python3 -m ruff check --no-cache squirrel-admin"
   rules:
+
     - changes:
         - squirrel-admin/**/*
         - .gitlab-ci.yml

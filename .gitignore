@@ -17,3 +17,15 @@ Cargo.lock
 # Added by cargo
 
 /target
+
+# Python / Ruff
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Node / JS
+node_modules/
+.npm/
+
+# OS files
+.DS_Store
