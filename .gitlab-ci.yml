@@ -17,7 +17,7 @@ lint-backend:
   stage: lint
   script:
     - echo "Running Rust format and clippy linting inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 sh -c "rustup component add rustfmt clippy && cargo fmt --check && cargo clippy -- -D warnings"
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 sh -c 'rustup component add rustfmt clippy && cargo fmt --check && cargo clippy -- -D warnings; status=$$?; chown -R $(stat -c "%u:%g" /app) /app; exit $$status'
   rules:
 
     - changes:
@@ -28,7 +28,7 @@ lint-admin:
   stage: lint
   script:
     - echo "Running Ruff checks on Django Admin panel inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app python:3.11-slim sh -c "pip install ruff && python3 -m ruff check --no-cache squirrel-admin"
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app python:3.11-slim sh -c 'pip install ruff && python3 -m ruff check --no-cache squirrel-admin; status=$$?; chown -R $(stat -c "%u:%g" /app) /app; exit $$status'
   rules:
 
     - changes:
@@ -39,7 +39,7 @@ lint-frontend:
   stage: lint
   script:
     - echo "Running ESLint on Frontend inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-front node:18-slim sh -c "npm ci --prefer-offline && npx eslint src"
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-front node:18-slim sh -c 'npm ci --prefer-offline && npx eslint src; status=$$?; chown -R $(stat -c "%u:%g" /app) /app; exit $$status'
   rules:
     - changes:
         - squirrel-front/**/*
@@ -52,7 +52,7 @@ test-backend:
   stage: test
   script:
     - echo "Running Rust unit/integration tests inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 cargo test --release
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 sh -c 'cargo test --release; status=$$?; chown -R $(stat -c "%u:%g" /app) /app; exit $$status'
   rules:
     - changes:
         - squirrel-engine/**/*
@@ -62,7 +62,7 @@ test-frontend:
   stage: test
   script:
     - echo "Running Frontend tests inside Docker..."
-    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-front node:18-slim sh -c "npm ci --prefer-offline && CI=true npm test"
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-front node:18-slim sh -c 'npm ci --prefer-offline && CI=true npm test; status=$$?; chown -R $(stat -c "%u:%g" /app) /app; exit $$status'
   rules:
     - changes:
         - squirrel-front/**/*
