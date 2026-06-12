@@ -2,7 +2,6 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   DOCKER_BUILDKIT: "1"
   IMAGE: $CI_REGISTRY_IMAGE
-  CARGO_HOME: $CI_PROJECT_DIR/squirrel-engine/.cargo-cache
 
 stages:
   - lint
@@ -12,35 +11,13 @@ stages:
   - deploy
 
 # ==========================================
-# Caches & Templates
-# ==========================================
-.rust-cache: &rust-cache
-  cache:
-    key: "rust-cache-$CI_COMMIT_REF_SLUG"
-    paths:
-      - squirrel-engine/.cargo-cache/
-      - squirrel-engine/target/
-
-.node-cache: &node-cache
-  cache:
-    key: "node-cache-$CI_COMMIT_REF_SLUG"
-    paths:
-      - squirrel-front/.npm/
-      - squirrel-front/node_modules/
-
-# ==========================================
 # STAGE: LINT
 # ==========================================
 lint-backend:
   stage: lint
-  image: rust:1.88.0
-  <<: *rust-cache
   script:
-    - cd squirrel-engine
-    - echo "Linting Rust formatting..."
-    - cargo fmt --check
-    - echo "Running Clippy static analysis..."
-    - cargo clippy -- -D warnings
+    - echo "Running Rust format and clippy linting inside Docker..."
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 sh -c "cargo fmt --check && cargo clippy -- -D warnings"
   rules:
     - changes:
         - squirrel-engine/**/*
@@ -48,12 +25,9 @@ lint-backend:
 
 lint-admin:
   stage: lint
-  image: python:3.11-slim
   script:
-    - echo "Installing Ruff python linter..."
-    - pip install ruff
-    - echo "Running Ruff checks on Django Admin panel..."
-    - python3 -m ruff check squirrel-admin
+    - echo "Running Ruff checks on Django Admin panel inside Docker..."
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app python:3.11-slim sh -c "pip install ruff && python3 -m ruff check squirrel-admin"
   rules:
     - changes:
         - squirrel-admin/**/*
@@ -61,14 +35,9 @@ lint-admin:
 
 lint-frontend:
   stage: lint
-  image: node:18-slim
-  <<: *node-cache
   script:
-    - echo "Installing frontend dependencies..."
-    - cd squirrel-front
-    - npm ci --cache .npm --prefer-offline
-    - echo "Linting React application using ESLint..."
-    - npx eslint src
+    - echo "Running ESLint on Frontend inside Docker..."
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-front node:18-slim sh -c "npm ci --prefer-offline && npx eslint src"
   rules:
     - changes:
         - squirrel-front/**/*
@@ -79,12 +48,9 @@ lint-frontend:
 # ==========================================
 test-backend:
   stage: test
-  image: rust:1.88.0
-  <<: *rust-cache
   script:
-    - cd squirrel-engine
-    - echo "Running Rust unit/integration tests..."
-    - cargo test --release
+    - echo "Running Rust unit/integration tests inside Docker..."
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-engine rust:1.88.0 cargo test --release
   rules:
     - changes:
         - squirrel-engine/**/*
@@ -92,13 +58,9 @@ test-backend:
 
 test-frontend:
   stage: test
-  image: node:18-slim
-  <<: *node-cache
   script:
-    - cd squirrel-front
-    - npm ci --cache .npm --prefer-offline
-    - echo "Running Frontend tests..."
-    - CI=true npm test
+    - echo "Running Frontend tests inside Docker..."
+    - docker run --rm -v "$CI_PROJECT_DIR:/app" -w /app/squirrel-front node:18-slim sh -c "npm ci --prefer-offline && CI=true npm test"
   rules:
     - changes:
         - squirrel-front/**/*
