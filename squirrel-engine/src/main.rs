@@ -13,7 +13,6 @@
     unused_imports
 )]
 
-
 use crate::{
     core::{
         context::{set_global_context, AppContext},
@@ -33,7 +32,8 @@ use tracing::info;
 use crate::handlers::auth::{me, refresh_token, telegram_login};
 use crate::handlers::chests::{buy_chest, get_chests, open_chest};
 use crate::handlers::clans::{
-    create_clan, get_clan_details, get_clans, get_tournament_details, get_tournaments, join_clan, register_for_tournament,
+    create_clan, get_clan_details, get_clans, get_tournament_details, get_tournaments, join_clan,
+    register_for_tournament,
 };
 use crate::handlers::daily::{claim_daily_reward, get_daily_status};
 use crate::handlers::friends::{

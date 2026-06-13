@@ -271,14 +271,14 @@ pub async fn get_profile(
     .unwrap_or(None);
 
     let clan = clan_row.map(|row| crate::handlers::clans::ClanDto {
-            id: row.try_get("id").unwrap_or(0),
-            name: row.try_get("name").unwrap_or_default(),
-            tag: row.try_get("tag").unwrap_or_default(),
-            owner_id: row.try_get("owner_id").unwrap_or(0),
-            rating: row.try_get("rating").unwrap_or(0),
-            trophies: row.try_get("trophies").unwrap_or(0),
-            members_count: row.try_get("members_count").unwrap_or(0),
-        });
+        id: row.try_get("id").unwrap_or(0),
+        name: row.try_get("name").unwrap_or_default(),
+        tag: row.try_get("tag").unwrap_or_default(),
+        owner_id: row.try_get("owner_id").unwrap_or(0),
+        rating: row.try_get("rating").unwrap_or(0),
+        trophies: row.try_get("trophies").unwrap_or(0),
+        members_count: row.try_get("members_count").unwrap_or(0),
+    });
 
     Ok(Json(ProfileResponseDto {
         user: user_info,
@@ -491,14 +491,14 @@ pub async fn get_public_profile(
     .unwrap_or(None);
 
     let clan = clan_row.map(|row| crate::handlers::clans::ClanDto {
-            id: row.try_get("id").unwrap_or(0),
-            name: row.try_get("name").unwrap_or_default(),
-            tag: row.try_get("tag").unwrap_or_default(),
-            owner_id: row.try_get("owner_id").unwrap_or(0),
-            rating: row.try_get("rating").unwrap_or(0),
-            trophies: row.try_get("trophies").unwrap_or(0),
-            members_count: row.try_get("members_count").unwrap_or(0),
-        });
+        id: row.try_get("id").unwrap_or(0),
+        name: row.try_get("name").unwrap_or_default(),
+        tag: row.try_get("tag").unwrap_or_default(),
+        owner_id: row.try_get("owner_id").unwrap_or(0),
+        rating: row.try_get("rating").unwrap_or(0),
+        trophies: row.try_get("trophies").unwrap_or(0),
+        members_count: row.try_get("members_count").unwrap_or(0),
+    });
 
     Ok(Json(ProfileResponseDto {
         user: user_info,
