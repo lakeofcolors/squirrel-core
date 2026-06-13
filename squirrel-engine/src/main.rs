@@ -6,7 +6,6 @@
     unused_imports
 )]
 
-
 use crate::{
     core::{
         context::{set_global_context, AppContext},
