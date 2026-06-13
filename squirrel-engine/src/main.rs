@@ -1,17 +1,11 @@
 #![allow(
-    clippy::ptr_arg,
-    clippy::nonminimal_bool,
-    clippy::too_many_arguments,
-    clippy::comparison_chain,
-    clippy::redundant_pattern_matching,
-    clippy::needless_range_loop,
-    clippy::let_underscore_future,
-    clippy::result_unit_err,
+    clippy::all,
     dead_code,
     unused_variables,
     unused_assignments,
     unused_imports
 )]
+
 
 use crate::{
     core::{
