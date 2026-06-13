@@ -223,7 +223,7 @@ pub fn analyze_and_hint(state: &GameState, player: PlayerPosition) -> (Option<Ca
         } else {
             "Заходим с сильной карты, чтобы попытаться забрать первую взятку без использования козырей.".to_string()
         };
-        return (Some(best_card), reason);
+        (Some(best_card), reason)
     } else {
         let lead_card = state.current_trick[0].1;
         let trump = state.trump;
@@ -252,7 +252,7 @@ pub fn analyze_and_hint(state: &GameState, player: PlayerPosition) -> (Option<Ca
                 winning_cards.sort_by_key(|c| c.power(lead_card.suit, trump));
                 let best_card = winning_cards[0];
                 let reason = "Эту взятку и так забирает наш напарник, но правила заставляют нас перебить его. Скидываем самую слабую из подходящих карт.".to_string();
-                return (Some(best_card), reason);
+                (Some(best_card), reason)
             } else {
                 let mut losing_cards: Vec<Card> = valid_cards
                     .into_iter()
@@ -262,12 +262,12 @@ pub fn analyze_and_hint(state: &GameState, player: PlayerPosition) -> (Option<Ca
                     losing_cards.sort_by_key(|c| c.points());
                     let best_card = *losing_cards.last().unwrap();
                     let reason = "Взятку гарантированно забирает наш напарник! «Мажемся» — скидываем самую «жирную» по очкам карту, чтобы принести команде максимум очков.".to_string();
-                    return (Some(best_card), reason);
+                    (Some(best_card), reason)
                 } else {
                     losing_cards.sort_by_key(|c| (c.power(lead_card.suit, trump), c.points()));
                     let best_card = losing_cards[0];
                     let reason = "Напарник пока побеждает во взятке, но после нас еще ходят оппоненты. На всякий случай скидываем слабую карту (не рискуем очками).".to_string();
-                    return (Some(best_card), reason);
+                    (Some(best_card), reason)
                 }
             }
         } else {
@@ -287,13 +287,13 @@ pub fn analyze_and_hint(state: &GameState, player: PlayerPosition) -> (Option<Ca
                     "У нас есть подходящая карта, чтобы забрать взятку! Используем её экономно."
                         .to_string()
                 };
-                return (Some(best_card), reason);
+                (Some(best_card), reason)
             } else {
                 let mut losing_cards = valid_cards;
                 losing_cards.sort_by_key(|c| (c.power(lead_card.suit, trump), c.points()));
                 let best_card = losing_cards[0];
                 let reason = "Мы никак не можем выиграть эту взятку. Скидываем самую слабую и ненужную карту, чтобы минимизировать потери.".to_string();
-                return (Some(best_card), reason);
+                (Some(best_card), reason)
             }
         }
     }

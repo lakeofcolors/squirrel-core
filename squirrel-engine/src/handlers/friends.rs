@@ -207,7 +207,7 @@ pub async fn consume_invite(
              WHERE telegram_id = ANY($1) 
              AND is_completed = FALSE 
              AND quest_id IN (SELECT id FROM event_quests WHERE quest_type = 'add_friend' AND event_id IN (SELECT id FROM events WHERE is_active = TRUE AND start_time <= NOW() AND end_time >= NOW()))"
-        ).bind(&vec![my_id, inviter_id]).execute(&mut *tx).await;
+        ).bind(vec![my_id, inviter_id]).execute(&mut *tx).await;
 
         let _ = sqlx::query(
             "UPDATE user_quest_progress 
@@ -215,7 +215,7 @@ pub async fn consume_invite(
              WHERE telegram_id = ANY($1) 
              AND is_completed = FALSE 
              AND current_amount >= (SELECT target_amount FROM event_quests WHERE id = user_quest_progress.quest_id)"
-        ).bind(&vec![my_id, inviter_id]).execute(&mut *tx).await;
+        ).bind(vec![my_id, inviter_id]).execute(&mut *tx).await;
     }
 
     tx.commit()
@@ -350,7 +350,7 @@ pub async fn accept_request(
          WHERE telegram_id = ANY($1) 
          AND is_completed = FALSE 
          AND quest_id IN (SELECT id FROM event_quests WHERE quest_type = 'add_friend' AND event_id IN (SELECT id FROM events WHERE is_active = TRUE AND start_time <= NOW() AND end_time >= NOW()))"
-    ).bind(&vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
+    ).bind(vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
 
     let _ = sqlx::query(
         "UPDATE user_quest_progress 
@@ -358,7 +358,7 @@ pub async fn accept_request(
          WHERE telegram_id = ANY($1) 
          AND is_completed = FALSE 
          AND current_amount >= (SELECT target_amount FROM event_quests WHERE id = user_quest_progress.quest_id)"
-    ).bind(&vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
+    ).bind(vec![req.from_telegram_id, req.to_telegram_id]).execute(&mut *tx).await;
 
     tx.commit()
         .await

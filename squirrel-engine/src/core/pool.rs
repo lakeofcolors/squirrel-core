@@ -138,6 +138,12 @@ impl PlayerSession {
     }
 }
 
+impl Default for ConnectionPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConnectionPool {
     pub fn new() -> Self {
         info!("Initializing ConnectionPool");
@@ -161,7 +167,7 @@ impl ConnectionPool {
                     event.clone(),
                     player_id
                 );
-                self.temp_disconnected(&player_id).await;
+                self.temp_disconnected(player_id).await;
             }
         } else {
             warn!("Attempted to send event to unknown player: {}", player_id);

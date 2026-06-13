@@ -6,6 +6,12 @@ pub struct AppSettings {
     bot_token: String,
 }
 
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppSettings {
     pub fn new() -> Self {
         Self {

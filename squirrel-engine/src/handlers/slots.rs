@@ -351,7 +351,7 @@ pub async fn spin_slots(
             }
         }
 
-        if bomb_cells.len() > 0 && total_win_amount > 0 {
+        if !bomb_cells.is_empty() && total_win_amount > 0 {
             total_win_amount *= bomb_multiplier;
             win_cells.extend(bomb_cells);
         }
@@ -468,22 +468,19 @@ pub async fn spin_slots(
         }
     }
 
-    if free_spins_awarded > 0 {
-        if sqlx::query!(
+    if free_spins_awarded > 0 && sqlx::query!(
             "UPDATE users SET slots_free_spins = slots_free_spins + $1 WHERE telegram_id = $2",
             free_spins_awarded,
             telegram_id
         )
         .execute(&mut *tx)
         .await
-        .is_err()
-        {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to award free spins",
-            )
-                .into_response();
-        }
+        .is_err() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to award free spins",
+        )
+            .into_response();
     }
 
     if let Err(_) = tx.commit().await {

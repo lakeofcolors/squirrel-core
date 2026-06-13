@@ -82,7 +82,7 @@ pub async fn telegram_login(
                 username,
                 photo_url,
             )
-            .fetch_one(&*pool)
+            .fetch_one(pool)
             .await;
 
             let _ = sqlx::query!(
@@ -95,7 +95,7 @@ pub async fn telegram_login(
                 "#,
                 telegram_id
             )
-            .execute(&*pool)
+            .execute(pool)
             .await;
 
             let _ = sqlx::query!(
@@ -107,7 +107,7 @@ pub async fn telegram_login(
                 "#,
                 telegram_id
             )
-            .execute(&*pool)
+            .execute(pool)
             .await;
 
             match (
@@ -174,7 +174,7 @@ pub async fn me(
          WHERE u.telegram_id = $1",
          telegram_id
     )
-    .fetch_one(&*pool)
+    .fetch_one(pool)
     .await;
 
     match user {

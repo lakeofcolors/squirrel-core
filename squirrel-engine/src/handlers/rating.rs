@@ -80,7 +80,7 @@ pub async fn get_leaderboard(
         league_filter,
         telegram_id_user
     )
-    .fetch_all(&*pool)
+    .fetch_all(pool)
     .await
     {
         Ok(r) => r,

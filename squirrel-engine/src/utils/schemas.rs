@@ -271,7 +271,7 @@ pub enum Suit {
 
 impl Suit {
     pub fn random_suit() -> Suit {
-        let suits = vec![Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades];
+        let suits = [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades];
         let mut rng = thread_rng();
         *suits.choose(&mut rng).expect("suits list is not empty")
     }
@@ -447,6 +447,12 @@ pub struct GameState {
     pub suits_played: HashSet<Suit>,
     pub paused: bool,
     pub eggs_active: bool,
+}
+
+impl Default for GameState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GameState {
@@ -639,29 +645,27 @@ impl GameState {
             if has_effective_lead_suit && !played_matches_effective_lead {
                 return Err("Нужно ходить в масть");
             }
-            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) {
-                if hand.len() > 1 {
-                    let has_alternative = hand.iter().any(|c| {
-                        if *c == card {
-                            return false;
-                        }
-
-                        let matches_effective = if effective_lead_suit == self.trump {
-                            c.suit == self.trump || c.rank == Rank::Jack
-                        } else {
-                            c.rank != Rank::Jack && c.suit == effective_lead_suit
-                        };
-
-                        if has_effective_lead_suit && !matches_effective {
-                            return false;
-                        }
-
-                        !(c.rank == Rank::Ace && !self.suits_played.contains(&c.suit))
-                    });
-
-                    if has_alternative {
-                        return Err("Нельзя играть туза пока его масть не сыграла");
+            if card.rank == Rank::Ace && !self.suits_played.contains(&card.suit) && hand.len() > 1 {
+                let has_alternative = hand.iter().any(|c| {
+                    if *c == card {
+                        return false;
                     }
+
+                    let matches_effective = if effective_lead_suit == self.trump {
+                        c.suit == self.trump || c.rank == Rank::Jack
+                    } else {
+                        c.rank != Rank::Jack && c.suit == effective_lead_suit
+                    };
+
+                    if has_effective_lead_suit && !matches_effective {
+                        return false;
+                    }
+
+                    !(c.rank == Rank::Ace && !self.suits_played.contains(&c.suit))
+                });
+
+                if has_alternative {
+                    return Err("Нельзя играть туза пока его масть не сыграла");
                 }
             }
         }
@@ -675,7 +679,7 @@ impl GameState {
     }
 
     pub fn resolve_trick(&mut self) -> Option<PlayerPosition> {
-        if self.current_trick.len() > 0 {
+        if !self.current_trick.is_empty() {
             let lead_card = self.current_trick[0].1;
             if lead_card.rank != Rank::Jack {
                 self.suits_played.insert(lead_card.suit);

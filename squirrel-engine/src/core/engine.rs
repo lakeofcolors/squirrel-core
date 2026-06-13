@@ -337,7 +337,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                                     continue;
                                 }
 
-                                let stakes = vec![10, 50, 100, 500];
+                                let stakes = [10, 50, 100, 500];
                                 use rand::Rng;
                                 let stake_idx = rand::thread_rng().gen_range(0..stakes.len());
                                 let stake_val = stakes[stake_idx];
@@ -744,7 +744,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                 }
                 RoomManagerCommand::SubscribeRooms { player } => {
                     if !room_subscribers.contains(&player) {
-                        room_subscribers.push(player.clone());
+                        room_subscribers.push(player);
                     }
                     let snapshot: Vec<RoomMeta> =
                         rooms.values().map(|room| room.meta.clone()).collect();
@@ -1293,13 +1293,13 @@ async fn update_player_rewards(
     .await
     .unwrap_or(None);
 
-    let has_xp_booster = user_info.as_ref().map_or(false, |u| {
+    let has_xp_booster = user_info.as_ref().is_some_and(|u| {
         u.xp_booster_ends_at
-            .map_or(false, |ts| ts > chrono::Utc::now())
+            .is_some_and(|ts| ts > chrono::Utc::now())
     });
-    let has_nuts_booster = user_info.as_ref().map_or(false, |u| {
+    let has_nuts_booster = user_info.as_ref().is_some_and(|u| {
         u.nuts_booster_ends_at
-            .map_or(false, |ts| ts > chrono::Utc::now())
+            .is_some_and(|ts| ts > chrono::Utc::now())
     });
 
     let mut final_nuts_delta = nuts_delta;
@@ -1313,14 +1313,12 @@ async fn update_player_rewards(
         } else {
             10
         }
+    } else if is_winner {
+        50
+    } else if is_leaver {
+        0
     } else {
-        if is_winner {
-            50
-        } else if is_leaver {
-            0
-        } else {
-            15
-        }
+        15
     };
 
     let mut final_xp = base_xp;
@@ -1341,12 +1339,10 @@ async fn update_player_rewards(
         }
     } else if is_leaver {
         vec![]
+    } else if is_winner {
+        vec!["play_ranked", "win_ranked"]
     } else {
-        if is_winner {
-            vec!["play_ranked", "win_ranked"]
-        } else {
-            vec!["play_ranked"]
-        }
+        vec!["play_ranked"]
     };
 
     if is_winner {
@@ -1550,7 +1546,7 @@ fn start_room_actor(
             player_trumps: state
                 .player_trump_map
                 .iter()
-                .map(|(k, v)| (format!("{:?}", k), v.clone()))
+                .map(|(k, v)| (format!("{:?}", k), *v))
                 .collect(),
         });
 
@@ -1566,10 +1562,8 @@ fn start_room_actor(
             if let Some(player) = players.get(i) {
                 if let Some(session) = app_ctx.connection_pool().get(&player.id) {
                     session.mark_as_in_game(room_id.clone(), *pos).await;
-                } else {
-                    if !player.is_bot {
-                        warn!("Player {} dropped immediately after room start", player.id);
-                    }
+                } else if !player.is_bot {
+                    warn!("Player {} dropped immediately after room start", player.id);
                 }
                 player_positions.insert(player.id, *pos);
                 app_ctx
@@ -1590,7 +1584,7 @@ fn start_room_actor(
             let snapshot = build_snapshot(&room_id, &state, &players, &player_positions);
             app_ctx
                 .connection_pool()
-                .send_to(&idx, WSEvent::GameSnapshot(snapshot))
+                .send_to(idx, WSEvent::GameSnapshot(snapshot))
                 .await;
         }
 
@@ -1770,7 +1764,7 @@ fn start_room_actor(
                                             use rand::Rng;
                                             let mut rng = rand::thread_rng();
                                             if rng.gen_bool(0.25) {
-                                                let taunts = vec!["🐿", "😡", "😂", "🔥", "😎"];
+                                                let taunts = ["🐿", "😡", "😂", "🔥", "😎"];
                                                 let taunt = taunts[rng.gen_range(0..taunts.len())]
                                                     .to_string();
                                                 let tx_clone = tx_actor.clone();
@@ -1812,7 +1806,7 @@ fn start_room_actor(
                                     );
 
                                     let eye = state.team_eye.clone();
-                                    let _ = state.update_hands(); //
+                                    state.update_hands(); //
                                     state.update_round_trump();
                                     state.update_round_attacking_team();
 
@@ -1826,7 +1820,7 @@ fn start_room_actor(
                                             player_trumps: state
                                                 .player_trump_map
                                                 .iter()
-                                                .map(|(k, v)| (format!("{:?}", k), v.clone()))
+                                                .map(|(k, v)| (format!("{:?}", k), *v))
                                                 .collect(),
                                         },
                                     );
@@ -1916,7 +1910,7 @@ fn start_room_actor(
                         Err(e) => {
                             if is_bot_move && !state.paused {
                                 warn!("Bot {} failed to play card {:?} due to {}, forcing random valid card!", player, card, e);
-                                if let Some(hand) = state.hands.get(&player_position) {
+                                if let Some(hand) = state.hands.get(player_position) {
                                     let mut valid = crate::core::bot::get_valid_cards(
                                         &state,
                                         *player_position,
@@ -2018,7 +2012,7 @@ fn start_room_actor(
                     break;
                 }
                 RoomActorCommand::PlayerTemporaryDisconnect { player } => {
-                    disconnected.insert(player.clone(), Instant::now());
+                    disconnected.insert(player, Instant::now());
                     state.paused = true;
 
                     let Some(pos) = player_positions.get_by_left(&player) else {
@@ -2043,7 +2037,7 @@ fn start_room_actor(
                     // Запускаем таймер 30 секунд
                     let room_id_clone = room_id.clone();
                     let manager_tx_clone = room_manager_tx.clone();
-                    let player_clone = player.clone();
+                    let player_clone = player;
 
                     tokio::spawn(async move {
                         tokio::time::sleep(Duration::from_secs(30)).await;
@@ -2160,7 +2154,7 @@ fn start_room_actor(
                         .broadcast(
                             all_targets.clone(),
                             WSEvent::GameClose {
-                                reason: format!("Игрок покинул игру/сдался"),
+                                reason: "Игрок покинул игру/сдался".to_string(),
                             },
                         )
                         .await;
@@ -2219,7 +2213,7 @@ fn start_room_actor(
                     .await
                     {
                         let coins = sender.free_coins;
-                        if coins >= stake + 1 {
+                        if coins > stake {
                             let _ = sqlx::query!("UPDATE users SET free_coins = free_coins - 1 WHERE telegram_id = $1", player).execute(pool).await;
                             let _ = sqlx::query!("UPDATE users SET free_coins = COALESCE(free_coins, 0) + 1 WHERE telegram_id = $1", target_id).execute(pool).await;
                             let mut all_targets = player_ids.clone();

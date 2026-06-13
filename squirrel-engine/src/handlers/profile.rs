@@ -270,8 +270,7 @@ pub async fn get_profile(
     .await
     .unwrap_or(None);
 
-    let clan = if let Some(row) = clan_row {
-        Some(crate::handlers::clans::ClanDto {
+    let clan = clan_row.map(|row| crate::handlers::clans::ClanDto {
             id: row.try_get("id").unwrap_or(0),
             name: row.try_get("name").unwrap_or_default(),
             tag: row.try_get("tag").unwrap_or_default(),
@@ -279,10 +278,7 @@ pub async fn get_profile(
             rating: row.try_get("rating").unwrap_or(0),
             trophies: row.try_get("trophies").unwrap_or(0),
             members_count: row.try_get("members_count").unwrap_or(0),
-        })
-    } else {
-        None
-    };
+        });
 
     Ok(Json(ProfileResponseDto {
         user: user_info,
@@ -494,8 +490,7 @@ pub async fn get_public_profile(
     .await
     .unwrap_or(None);
 
-    let clan = if let Some(row) = clan_row {
-        Some(crate::handlers::clans::ClanDto {
+    let clan = clan_row.map(|row| crate::handlers::clans::ClanDto {
             id: row.try_get("id").unwrap_or(0),
             name: row.try_get("name").unwrap_or_default(),
             tag: row.try_get("tag").unwrap_or_default(),
@@ -503,10 +498,7 @@ pub async fn get_public_profile(
             rating: row.try_get("rating").unwrap_or(0),
             trophies: row.try_get("trophies").unwrap_or(0),
             members_count: row.try_get("members_count").unwrap_or(0),
-        })
-    } else {
-        None
-    };
+        });
 
     Ok(Json(ProfileResponseDto {
         user: user_info,

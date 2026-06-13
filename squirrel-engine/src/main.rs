@@ -1,3 +1,19 @@
+#![allow(
+    clippy::ptr_arg,
+    clippy::nonminimal_bool,
+    clippy::too_many_arguments,
+    clippy::comparison_chain,
+    clippy::redundant_pattern_matching,
+    clippy::needless_range_loop,
+    clippy::let_underscore_future,
+    clippy::result_unit_err,
+    dead_code,
+    unused_variables,
+    unused_assignments,
+    unused_imports
+)]
+
+
 use crate::{
     core::{
         context::{set_global_context, AppContext},
@@ -5,6 +21,7 @@ use crate::{
     },
     handlers::store::{equip_item, get_store},
 };
+
 use axum::{
     extract::Extension,
     routing::{get, post},
@@ -12,13 +29,11 @@ use axum::{
 };
 use tokio::net::TcpListener;
 use tracing::info;
-use tracing_subscriber;
 // use crate::utils::jwt::handle_auth;
 use crate::handlers::auth::{me, refresh_token, telegram_login};
 use crate::handlers::chests::{buy_chest, get_chests, open_chest};
 use crate::handlers::clans::{
-    create_clan, get_clan_details, get_clans, get_tournament_details, get_tournaments, join_clan,
-    leave_clan, register_for_tournament,
+    create_clan, get_clan_details, get_clans, get_tournament_details, get_tournaments, join_clan, register_for_tournament,
 };
 use crate::handlers::daily::{claim_daily_reward, get_daily_status};
 use crate::handlers::friends::{

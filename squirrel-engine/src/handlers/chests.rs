@@ -278,7 +278,7 @@ pub async fn buy_chest(
     .await;
 
     let balance = match user_balance {
-        Ok(Some(row)) => row.free_coins as i32,
+        Ok(Some(row)) => row.free_coins,
         _ => return (StatusCode::NOT_FOUND, "User not found").into_response(),
     };
 
