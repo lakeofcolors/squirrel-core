@@ -236,7 +236,7 @@ export default function MatchSummaryModal({ match, currentUserId, onClose, onWat
               <div className="mt-6 flex flex-col sm:flex-row justify-center gap-4 pt-2">
                  <button
                    onClick={() => {
-                     const botName = import.meta.env.VITE_BOT_NAME || "squirrel_game_bot";
+                     const botName = process.env.REACT_APP_BOT_NAME || "squirrel_game_bot";
                      const shareUrl = `https://t.me/${botName}?startapp=ref_${user?.id || ''}`;
                      const text = `Я только что сыграл в Белку и набрал ${match.score || 'отличный счет'}! Попробуй побить мой рекорд! 🐿`;
                      if (window.Telegram?.WebApp) {

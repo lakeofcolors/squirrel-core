@@ -2396,7 +2396,7 @@ function FriendsPage() {
     const tg = window.Telegram?.WebApp;
     const me = user?.id || "";
     
-    const botName = import.meta.env.VITE_BOT_NAME || "squirrel_game_bot";
+    const botName = process.env.REACT_APP_BOT_NAME || "squirrel_game_bot";
     const shareLink = `https://t.me/${botName}?startapp=ref${me}`;
     
     const shareText = `В карточной игре «Белка» сейчас жарко! 🐿🔥\n\nПрисоединяйся ко мне, побеждай в матчах и забирай уникальные колоды! 🏆\nБрось мне вызов прямо сейчас! 👇`;
