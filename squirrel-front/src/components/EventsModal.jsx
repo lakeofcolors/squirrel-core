@@ -7,8 +7,63 @@ import { DeckPreview } from "../SearchGame";
 import { renderTauntGraphic } from "../Game";
 import { useGameStore } from "../store";
 
+export const eventThemes = {
+  spring_festival: {
+    bannerBg: "from-pink-500 via-rose-500 to-orange-400",
+    shadowColor: "shadow-pink-500/20",
+    emoji: "🌸",
+    textColor: "text-pink-100",
+    cardBorder: "border-pink-500/30 shadow-[0_0_40px_rgba(236,72,153,0.15)]",
+    headerBg: "from-pink-600 via-rose-500 to-orange-400",
+    questBorder: "border-pink-500/20 shadow-pink-900/10",
+    questProgressBar: "from-pink-500 to-rose-400",
+    tabColor: "text-pink-400 border-pink-400",
+    buyBtn: "from-pink-600 to-orange-500 shadow-[0_0_15px_rgba(236,72,153,0.3)]",
+  },
+  halloween: {
+    bannerBg: "from-orange-600 via-purple-700 to-slate-900",
+    shadowColor: "shadow-orange-500/20",
+    emoji: "🎃",
+    textColor: "text-orange-200",
+    cardBorder: "border-orange-500/30 shadow-[0_0_40px_rgba(249,115,22,0.15)]",
+    headerBg: "from-orange-600 via-purple-700 to-slate-900",
+    questBorder: "border-orange-500/20 shadow-orange-900/10",
+    questProgressBar: "from-orange-500 to-purple-600",
+    tabColor: "text-orange-400 border-orange-400",
+    buyBtn: "from-orange-600 to-purple-700 shadow-[0_0_15px_rgba(249,115,22,0.3)]",
+  },
+  winter_wonderland: {
+    bannerBg: "from-blue-500 via-sky-400 to-indigo-600",
+    shadowColor: "shadow-blue-500/20",
+    emoji: "❄️",
+    textColor: "text-blue-100",
+    cardBorder: "border-blue-500/30 shadow-[0_0_40px_rgba(59,130,246,0.15)]",
+    headerBg: "from-blue-600 via-sky-400 to-indigo-700",
+    questBorder: "border-blue-500/20 shadow-blue-900/10",
+    questProgressBar: "from-blue-400 to-indigo-500",
+    tabColor: "text-blue-400 border-blue-400",
+    buyBtn: "from-blue-600 to-indigo-600 shadow-[0_0_15px_rgba(59,130,246,0.3)]",
+  },
+  default: {
+    bannerBg: "from-purple-600 via-indigo-600 to-blue-500",
+    shadowColor: "shadow-purple-500/20",
+    emoji: "✨",
+    textColor: "text-purple-100",
+    cardBorder: "border-purple-500/30 shadow-[0_0_40px_rgba(168,85,247,0.15)]",
+    headerBg: "from-purple-600 via-indigo-600 to-blue-500",
+    questBorder: "border-purple-500/20 shadow-purple-900/10",
+    questProgressBar: "from-purple-500 to-indigo-400",
+    tabColor: "text-purple-400 border-purple-400",
+    buyBtn: "from-purple-600 to-indigo-600 shadow-[0_0_15px_rgba(168,85,247,0.3)]",
+  }
+};
+
+export function getEventTheme(eventKey) {
+  return eventThemes[eventKey] || eventThemes.default;
+}
+
 // Progress bar component for quests
-function QuestProgressBar({ current, target }) {
+function QuestProgressBar({ current, target, theme }) {
   const progress = Math.min(100, Math.max(0, (current / target) * 100));
   return (
     <div className="w-full mt-2">
@@ -18,7 +73,7 @@ function QuestProgressBar({ current, target }) {
       </div>
       <div className="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
         <div 
-          className="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full transition-all duration-500"
+          className={`h-full bg-gradient-to-r ${theme.questProgressBar} rounded-full transition-all duration-500`}
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -31,6 +86,8 @@ export default function EventsModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('quests'); // 'quests' | 'shop'
   const [buyingId, setBuyingId] = useState(null);
+
+  const theme = getEventTheme(eventData?.event_key);
 
   const fetchEvent = async () => {
     try {
@@ -135,10 +192,10 @@ const renderItemPreview = (item) => {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-md overflow-hidden rounded-3xl bg-[#131320] border border-pink-500/30 shadow-[0_0_40px_rgba(236,72,153,0.15)] flex flex-col h-[85vh] max-h-[700px]"
+          className={`relative w-full max-w-md overflow-hidden rounded-3xl bg-[#131320] border ${theme.cardBorder} flex flex-col h-[85vh] max-h-[700px]`}
         >
           {/* Header Banner */}
-          <div className="relative h-40 shrink-0 w-full overflow-hidden bg-gradient-to-br from-pink-600 via-rose-500 to-orange-400 p-6 flex flex-col justify-end">
+          <div className={`relative h-40 shrink-0 w-full overflow-hidden bg-gradient-to-br ${theme.headerBg} p-6 flex flex-col justify-end`}>
             {/* Abstract background shapes */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
             <div className="absolute bottom-0 left-0 w-40 h-40 bg-black/20 rounded-full blur-2xl translate-y-1/4 -translate-x-1/4"></div>
@@ -187,13 +244,13 @@ const renderItemPreview = (item) => {
                 <div className="flex gap-4 px-1 border-b border-white/10">
                   <button 
                     onClick={() => setActiveTab('quests')}
-                    className={`pb-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'quests' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`pb-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'quests' ? `${theme.tabColor} border-b-2` : 'text-gray-500 hover:text-gray-300'}`}
                   >
                     📝 Задания
                   </button>
                   <button 
                     onClick={() => setActiveTab('shop')}
-                    className={`pb-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'shop' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`pb-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'shop' ? `${theme.tabColor} border-b-2` : 'text-gray-500 hover:text-gray-300'}`}
                   >
                     🛍️ Магазин
                   </button>
@@ -201,20 +258,20 @@ const renderItemPreview = (item) => {
 
                 <div className="space-y-3 pb-8">
                   {activeTab === 'quests' && eventData.quests.map((quest) => (
-                    <div key={quest.id} className={`relative overflow-hidden p-4 rounded-2xl border transition-all ${quest.is_claimed ? 'bg-black/40 border-white/5 opacity-60' : 'bg-[#1a1a2e] border-pink-500/20 shadow-lg shadow-pink-900/10'}`}>
+                    <div key={quest.id} className={`relative overflow-hidden p-4 rounded-2xl border transition-all ${quest.is_claimed ? 'bg-black/40 border-white/5 opacity-60' : `bg-[#1a1a2e] ${theme.questBorder}`}`}>
                        <div className="flex justify-between items-start gap-4">
                          <div className="flex-1 min-w-0">
                            <h4 className="font-bold text-white text-sm break-words leading-tight">{quest.title}</h4>
                            
                            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/40 border border-white/5">
                              <span className="text-[11px] text-gray-400 font-medium">Награда:</span>
-                             <span className="text-xs font-bold text-pink-400">
+                             <span className={`text-xs font-bold ${theme.tabColor.split(' ')[0]}`}>
                                +{quest.reward_amount} {quest.reward_type === 'event_currency' ? eventData.currency_icon : quest.reward_type === 'xp' ? 'XP' : quest.reward_type === 'nuts' ? '🥜' : '📦'}
                              </span>
                            </div>
 
                            {!quest.is_claimed && (
-                             <QuestProgressBar current={quest.current_amount} target={quest.target_amount} />
+                             <QuestProgressBar current={quest.current_amount} target={quest.target_amount} theme={theme} />
                            )}
                          </div>
 
@@ -226,7 +283,7 @@ const renderItemPreview = (item) => {
                            ) : quest.is_completed ? (
                              <button
                                onClick={() => claimQuest(quest.id)}
-                               className="relative overflow-hidden bg-gradient-to-r from-pink-500 to-orange-400 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-[0_0_15px_rgba(236,72,153,0.4)] hover:scale-105 active:scale-95 transition-all"
+                               className={`relative overflow-hidden bg-gradient-to-r ${theme.buyBtn.split(' ')[0]} text-white font-bold text-xs px-4 py-2 rounded-xl shadow-[0_0_15px_rgba(236,72,153,0.4)] hover:scale-105 active:scale-95 transition-all`}
                              >
                                <span className="relative z-10 uppercase tracking-widest">Забрать</span>
                              </button>
@@ -241,7 +298,7 @@ const renderItemPreview = (item) => {
                   ))}
 
                   {activeTab === 'shop' && eventData.shop_items?.length > 0 && eventData.shop_items.map((item) => (
-                    <div key={item.id} className="group relative overflow-hidden p-4 rounded-2xl border bg-[#1a1a2e] border-orange-500/20 shadow-lg shadow-orange-900/10 flex justify-between items-center gap-4 transition-all hover:bg-[#1f1f33] hover:border-orange-500/40">
+                    <div key={item.id} className={`group relative overflow-hidden p-4 rounded-2xl border bg-[#1a1a2e] ${theme.questBorder} flex justify-between items-center gap-4 transition-all hover:bg-[#1f1f33] hover:border-white/10`}>
                        <div className="flex items-center gap-3">
                          <div className="flex-shrink-0 flex items-center justify-center p-1 w-16 h-16 bg-black/30 rounded-2xl border border-white/10 shadow-inner">
                            {renderItemPreview(item)}
@@ -269,7 +326,7 @@ const renderItemPreview = (item) => {
                              ${(item.max_purchases !== null && item.purchase_count >= item.max_purchases)
                                ? 'bg-red-500/20 text-red-400 cursor-not-allowed border border-red-500/20'
                                : eventData.currency_balance >= item.cost 
-                                 ? 'bg-gradient-to-tr from-pink-600 to-orange-500 shadow-[0_0_15px_rgba(236,72,153,0.3)] hover:scale-105 active:scale-95' 
+                                 ? `bg-gradient-to-tr ${theme.buyBtn} hover:scale-105 active:scale-95` 
                                  : 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-70'}
                            `}
                          >

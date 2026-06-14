@@ -19,7 +19,7 @@ import MatchSummaryModal from "./components/MatchSummaryModal";
 import ReplayViewer from "./components/ReplayViewer";
 import ChestOpeningModal from "./components/ChestOpeningModal";
 import DailyRewardsModal from "./components/DailyRewardsModal";
-import EventsModal from "./components/EventsModal";
+import EventsModal, { getEventTheme } from "./components/EventsModal";
 import InviteModal from "./components/InviteModal";
 import LuckySpinModal from "./components/LuckySpinModal";
 import SlotsModal from "./components/SlotsModal";
@@ -2162,6 +2162,7 @@ function GamesPage({
   setLoading,
   openJoinModal,
   dispatch,
+  activeEvent,
 }) {
   return (
     <>
@@ -2179,21 +2180,25 @@ function GamesPage({
             <div className="text-3xl drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">🎁</div>
           </div>
         </button>
-        <button
-          onClick={() => setEventsOpen(true)}
-          className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-orange-400 px-5 py-3 text-left shadow-lg shadow-pink-500/20 transition hover:scale-[1.01] active:scale-[0.985]"
-        >
-          <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition" />
-          <div className="relative flex items-center justify-between gap-3">
-            <div>
-              <div className="text-lg font-extrabold text-white">Весенний Фестиваль</div>
-              <div className="text-sm text-pink-100 flex items-center gap-1">Выполняй задания <span className="animate-bounce">🌸</span></div>
+        {activeEvent && (
+          <button
+            onClick={() => setEventsOpen(true)}
+            className={`group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r ${getEventTheme(activeEvent.event_key).bannerBg} px-5 py-3 text-left shadow-lg ${getEventTheme(activeEvent.event_key).shadowColor} transition hover:scale-[1.01] active:scale-[0.985]`}
+          >
+            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition" />
+            <div className="relative flex items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-extrabold text-white">{activeEvent.title}</div>
+                <div className="text-sm text-white/80 flex items-center gap-1">
+                  Выполняй задания <span className="animate-bounce">{getEventTheme(activeEvent.event_key).emoji}</span>
+                </div>
+              </div>
+              <div className="text-sm font-bold bg-black/20 px-3 py-1.5 rounded-xl text-white backdrop-blur-sm border border-white/20">
+                События
+              </div>
             </div>
-            <div className="text-sm font-bold bg-black/20 px-3 py-1.5 rounded-xl text-white backdrop-blur-sm border border-white/20">
-              События
-            </div>
-          </div>
-        </button>
+          </button>
+        )}
         <button
           onClick={() => {
             const userState = useGameStore.getState().user;
@@ -3718,6 +3723,7 @@ export default function GameSearch() {
   const [dailyRewardsOpen, setDailyRewardsOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
   const [luckySpinOpen, setLuckySpinOpen] = useState(false);
+  const [activeEvent, setActiveEvent] = useState(null);
   const [slotsModalOpen, setSlotsModalOpen] = useState(false);
   const [chestToOpen, setChestToOpen] = useState(null);
 
@@ -3777,6 +3783,22 @@ export default function GameSearch() {
     loadUser();
   }, [setUser]);
 
+  useEffect(() => {
+    const fetchActiveEvent = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) return;
+        const res = await axios.get(getUrl("/v1/events"), {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setActiveEvent(res.data.event);
+      } catch (e) {
+        console.error("Failed to fetch active event", e);
+      }
+    };
+    fetchActiveEvent();
+  }, [currentUser]);
+
   const leaveRoom = (room_id) => {
     sendleaveRoom(room_id);
     setSelectedRoom(null);
@@ -3827,6 +3849,7 @@ export default function GameSearch() {
             dispatch={dispatch}
             setDailyRewardsOpen={setDailyRewardsOpen}
             setEventsOpen={setEventsOpen}
+            activeEvent={activeEvent}
           />
         </div>
       </div>
