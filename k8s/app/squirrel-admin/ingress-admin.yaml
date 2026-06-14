@@ -12,10 +12,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - admin.lakeofcolors.com
+    - admin-belka.lakeofcolors.com
     secretName: squirrel-admin-tls
   rules:
-  - host: admin.lakeofcolors.com
+  - host: admin-belka.lakeofcolors.com
     http:
       paths:
       - path: /

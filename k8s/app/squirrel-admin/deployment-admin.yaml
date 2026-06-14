@@ -30,9 +30,9 @@ spec:
                 name: squirrel-secrets
           env:
             - name: ALLOWED_HOSTS
-              value: "admin.lakeofcolors.com"
+              value: "admin-belka.lakeofcolors.com"
             - name: CSRF_TRUSTED_ORIGINS
-              value: "https://admin.lakeofcolors.com"
+              value: "https://admin-belka.lakeofcolors.com"
             - name: DEBUG
               value: "False"
           resources:

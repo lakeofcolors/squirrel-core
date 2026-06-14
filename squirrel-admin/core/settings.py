@@ -12,7 +12,7 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 if '*' in ALLOWED_HOSTS:
     ALLOWED_HOSTS = ['*']
 
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://admin.lakeofcolors.com').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://admin-belka.lakeofcolors.com').split(',')
 
 INSTALLED_APPS = [
     'unfold',
