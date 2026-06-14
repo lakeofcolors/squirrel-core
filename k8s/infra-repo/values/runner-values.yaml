@@ -1,5 +1,4 @@
 gitlabUrl: https://gitlab.lakeofcolors.com
-runnerRegistrationToken: "glrt-8_lYo8ksWsCDaXJLnV01DW86MQpwOjEKdDozCnU6MQ8.01.171k2p1bx"
 
 rbac:
   create: true
@@ -9,6 +8,7 @@ serviceAccount:
   name: gitlab-runner
 
 runners:
+  secret: "gitlab-runner"
   name: k8s-runner
   tags: "k8s"
   runUntagged: false

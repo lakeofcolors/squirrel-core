@@ -289,6 +289,28 @@ export function getDeckTheme(theme, suit) {
       inner: "#031703",
       pipBg: "rgba(34,197,94,0.08)",
     },
+    arcane: {
+      name: "Arcane",
+      rarity: "mythic",
+      bg: "#080214",
+      border: "#a855f7",
+      glow: "#c084fc",
+      text: isRed ? "#f472b6" : "#c084fc",
+      accent: "#fbbf24",
+      inner: "#17062e",
+      pipBg: "rgba(168,85,247,0.08)",
+    },
+    mecha: {
+      name: "Mecha",
+      rarity: "mythic",
+      bg: "#070c12",
+      border: "#06b6d4",
+      glow: "#0891b2",
+      text: isRed ? "#fb923c" : "#22d3ee",
+      accent: "#f97316",
+      inner: "#0f172a",
+      pipBg: "rgba(6,182,212,0.08)",
+    },
   };
 
   return themes[theme] || themes.neon;
@@ -361,11 +383,31 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
               0% { stroke-dashoffset: 0; }
               100% { stroke-dashoffset: -30; }
             }
+            @keyframes rotate-arcane-${rank}-${card.suit} {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            @keyframes pulse-rune-${rank}-${card.suit} {
+              0%, 100% { opacity: 0.35; filter: drop-shadow(0 0 1px #a855f7); }
+              50% { opacity: 0.85; filter: drop-shadow(0 0 4px #fbbf24); }
+            }
+            @keyframes mecha-scan-${rank}-${card.suit} {
+              0%, 100% { y: 12px; opacity: 0.2; }
+              50% { y: 138px; opacity: 0.9; }
+            }
+            @keyframes mecha-hud-${rank}-${card.suit} {
+              0%, 100% { opacity: 0.4; transform: scale(0.98); }
+              50% { opacity: 0.9; transform: scale(1.02); }
+            }
             .star-p-1-${rank}-${card.suit} { animation: pulse-stars-${rank}-${card.suit} 1.5s ease-in-out infinite; }
             .star-p-2-${rank}-${card.suit} { animation: pulse-stars-${rank}-${card.suit} 2.5s ease-in-out infinite; }
             .orbit-rot-${rank}-${card.suit} { transform-origin: 50px 75px; animation: rotate-orbit-${rank}-${card.suit} 12s linear infinite; }
             .lava-f-${rank}-${card.suit} { animation: lava-flow-${rank}-${card.suit} 4s ease-in-out infinite; }
             .matrix-c-${rank}-${card.suit} { animation: matrix-code-${rank}-${card.suit} 2.5s linear infinite; }
+            .arcane-rot-${rank}-${card.suit} { transform-origin: 50px 75px; animation: rotate-arcane-${rank}-${card.suit} 20s linear infinite; }
+            .rune-p-${rank}-${card.suit} { animation: pulse-rune-${rank}-${card.suit} 3s ease-in-out infinite; }
+            .mecha-s-${rank}-${card.suit} { animation: mecha-scan-${rank}-${card.suit} 4s ease-in-out infinite; }
+            .mecha-h-${rank}-${card.suit} { transform-origin: 50px 75px; animation: mecha-hud-${rank}-${card.suit} 5s ease-in-out infinite; }
           `}</style>
           <radialGradient id={`face-glow-${theme}-${rank}-${card.suit}`} cx="50%" cy="50%">
             <stop offset="0" stopColor={t.glow} stopOpacity="0.35" />
@@ -432,6 +474,34 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
           </g>
         )}
 
+        {theme === "arcane" && (
+          <g>
+            <circle cx="50" cy="75" r="34" fill="none" stroke={t.border} strokeWidth="1" strokeDasharray="4,8,12,6" opacity="0.4" className={`arcane-rot-${rank}-${card.suit}`} />
+            <circle cx="50" cy="75" r="26" fill="none" stroke={t.accent} strokeWidth="0.75" strokeDasharray="2,6,4,8" opacity="0.3" className={`arcane-rot-${rank}-${card.suit}`} style={{ animationDirection: 'reverse', animationDuration: '14s' }} />
+            <circle cx="50" cy="36" r="2" fill={t.accent} className={`rune-p-${rank}-${card.suit}`} />
+            <circle cx="50" cy="114" r="2" fill={t.accent} className={`rune-p-${rank}-${card.suit}`} style={{ animationDelay: '1.5s' }} />
+            <circle cx="16" cy="75" r="2" fill={t.border} className={`rune-p-${rank}-${card.suit}`} style={{ animationDelay: '0.7s' }} />
+            <circle cx="84" cy="75" r="2" fill={t.border} className={`rune-p-${rank}-${card.suit}`} style={{ animationDelay: '2.2s' }} />
+          </g>
+        )}
+
+        {theme === "mecha" && (
+          <g>
+            <g className={`mecha-h-${rank}-${card.suit}`} opacity="0.3">
+              <circle cx="50" cy="75" r="30" fill="none" stroke={t.border} strokeWidth="0.75" strokeDasharray="10,5,2,5" />
+              <line x1="50" y1="35" x2="50" y2="43" stroke={t.accent} strokeWidth="1" />
+              <line x1="50" y1="107" x2="50" y2="115" stroke={t.accent} strokeWidth="1" />
+              <line x1="10" y1="75" x2="18" y2="75" stroke={t.border} strokeWidth="1" />
+              <line x1="82" y1="75" x2="90" y2="75" stroke={t.border} strokeWidth="1" />
+            </g>
+            <line x1="8" y1="0" x2="92" y2="0" stroke={t.accent} strokeWidth="1.2" opacity="0.7" className={`mecha-s-${rank}-${card.suit}`} />
+            <path d="M12,16 L18,16 L12,22 Z" fill="none" stroke={t.border} strokeWidth="0.75" opacity="0.4" />
+            <path d="M88,16 L82,16 L88,22 Z" fill="none" stroke={t.border} strokeWidth="0.75" opacity="0.4" />
+            <path d="M12,134 L18,134 L12,128 Z" fill="none" stroke={t.border} strokeWidth="0.75" opacity="0.4" />
+            <path d="M88,134 L82,134 L88,128 Z" fill="none" stroke={t.border} strokeWidth="0.75" opacity="0.4" />
+          </g>
+        )}
+
         <circle cx="50" cy="75" r="52" fill={`url(#face-glow-${theme}-${rank}-${card.suit})`} />
 
         <text x="10" y="22" fontSize="18" fill={t.text} fontWeight="800">
@@ -442,15 +512,88 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
         </text>
 
         {isFaceCard ? (
-          // Если Валет, Дама или Король — рисуем Белку-Рыцаря
-          <image
-            href={squirrelImg} // Убедись, что путь правильный
-            x="0"
-            y="25"
-            width="90"
-            height="100"
-            preserveAspectRatio="xMidYMid meet"
-          />
+          theme === "arcane" ? (
+            <g>
+              {card.rank === "Jack" && (
+                <g>
+                  <line x1="50" y1="45" x2="50" y2="115" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
+                  <line x1="50" y1="50" x2="50" y2="110" stroke="#a855f7" strokeWidth="1.0" />
+                  <path d="M43,62 Q50,66 57,62" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+                  <path d="M40,52 Q50,58 60,52" fill="none" stroke="#fbbf24" strokeWidth="2" />
+                  <polygon points="50,32 58,45 50,58 42,45" fill={`url(#face-frame-${theme}-${rank}-${card.suit})`} stroke="#fbbf24" strokeWidth="1.5" />
+                  <circle cx="50" cy="45" r="3" fill="#ffffff" opacity="0.8" className={`rune-p-${rank}-${card.suit}`} />
+                  <circle cx="50" cy="45" r="12" fill="none" stroke="#fbbf24" strokeWidth="0.75" strokeDasharray="3,3" opacity="0.6" className={`arcane-rot-${rank}-${card.suit}`} />
+                </g>
+              )}
+              {card.rank === "Queen" && (
+                <g>
+                  <path d="M30,75 A20,20 0 0,0 70,75" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M25,75 A25,25 0 0,0 75,75" fill="none" stroke="#a855f7" strokeWidth="1.5" strokeDasharray="4,4" />
+                  <circle cx="50" cy="70" r="16" fill={`url(#face-glow-${theme}-${rank}-${card.suit})`} stroke="#c084fc" strokeWidth="1.5" />
+                  <circle cx="50" cy="70" r="10" fill="none" stroke="#ffffff" strokeWidth="0.5" opacity="0.4" />
+                  <polygon points="50,44 52,48 50,52 48,48" fill="#fbbf24" className={`rune-p-${rank}-${card.suit}`} />
+                  <polygon points="35,68 37,70 35,72 33,70" fill="#fbbf24" className={`rune-p-${rank}-${card.suit}`} style={{ animationDelay: '1s' }} />
+                  <polygon points="65,68 67,70 65,72 63,70" fill="#fbbf24" className={`rune-p-${rank}-${card.suit}`} style={{ animationDelay: '2s' }} />
+                  <path d="M40,92 L60,92 L55,83 L45,83 Z" fill="#fbbf24" stroke="#a855f7" strokeWidth="1" />
+                </g>
+              )}
+              {card.rank === "King" && (
+                <g>
+                  <polygon points="50,25 58,110 50,118 42,110" fill="none" stroke="#a855f7" strokeWidth="0.5" opacity="0.3" />
+                  <path d="M46,42 L54,42 L53,108 L50,115 L47,108 Z" fill="#17062e" stroke="#c084fc" strokeWidth="1.5" />
+                  <line x1="50" y1="44" x2="50" y2="105" stroke="#fbbf24" strokeWidth="1.0" strokeDasharray="3,5" />
+                  <path d="M34,42 L66,42 L62,38 L38,38 Z" fill="#fbbf24" stroke="#a855f7" strokeWidth="1" />
+                  <rect x="47" y="24" width="6" height="14" rx="2" fill="#fbbf24" />
+                  <circle cx="50" cy="22" r="3.5" fill="#a855f7" stroke="#fbbf24" strokeWidth="0.75" />
+                </g>
+              )}
+            </g>
+          ) : theme === "mecha" ? (
+            <g>
+              {card.rank === "Jack" && (
+                <g>
+                  <path d="M46,30 L54,30 L54,105 L46,105 Z" fill="rgba(6,182,212,0.15)" />
+                  <line x1="50" y1="30" x2="50" y2="102" stroke="#22d3ee" strokeWidth="4.5" strokeLinecap="round" />
+                  <line x1="50" y1="32" x2="50" y2="100" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M38,102 L62,102 L58,107 L42,107 Z" fill="#0f172a" stroke="#f97316" strokeWidth="1.5" />
+                  <rect x="47" y="107" width="6" height="16" fill="#1e293b" stroke="#06b6d4" strokeWidth="1" />
+                  <rect x="49" y="123" width="2" height="4" fill="#f97316" />
+                </g>
+              )}
+              {card.rank === "Queen" && (
+                <g>
+                  <polygon points="50,42 74,56 74,84 50,98 26,84 26,56" fill="none" stroke="#f97316" strokeWidth="0.75" opacity="0.6" className={`mecha-h-${rank}-${card.suit}`} />
+                  <polygon points="50,52 66,61 50,70 34,61" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.5" />
+                  <polygon points="34,61 50,70 50,88 34,79" fill="#070c12" stroke="#22d3ee" strokeWidth="1.5" />
+                  <polygon points="50,70 66,61 66,79 50,88" fill="#1e293b" stroke="#22d3ee" strokeWidth="1.5" />
+                  <circle cx="50" cy="70" r="5" fill="#f97316" className={`rune-p-${rank}-${card.suit}`} />
+                  <line x1="50" y1="36" x2="50" y2="46" stroke="#22d3ee" strokeWidth="1" strokeDasharray="2,2" />
+                  <line x1="50" y1="94" x2="50" y2="104" stroke="#22d3ee" strokeWidth="1" strokeDasharray="2,2" />
+                </g>
+              )}
+              {card.rank === "King" && (
+                <g>
+                  <polygon points="32,45 44,35 44,105 28,95" fill="#0f172a" stroke="#06b6d4" strokeWidth="1.5" />
+                  <polygon points="68,45 56,35 56,105 72,95" fill="#0f172a" stroke="#06b6d4" strokeWidth="1.5" />
+                  <polygon points="46,38 54,38 54,98 46,98" fill="#1e293b" stroke="#f97316" strokeWidth="1.5" />
+                  <line x1="50" y1="44" x2="50" y2="92" stroke="#22d3ee" strokeWidth="2" className={`rune-p-${rank}-${card.suit}`} />
+                  <circle cx="40" cy="44" r="1" fill="#f97316" />
+                  <circle cx="60" cy="44" r="1" fill="#f97316" />
+                  <circle cx="36" cy="94" r="1" fill="#06b6d4" />
+                  <circle cx="64" cy="94" r="1" fill="#06b6d4" />
+                </g>
+              )}
+            </g>
+          ) : (
+            <image
+              href={squirrelImg} // Убедись, что путь правильный
+              x="0"
+              y="25"
+              width="90"
+              height="100"
+              preserveAspectRatio="xMidYMid meet"
+            />
+          )
         ) : (
           // Если 7, 8, 9, 10 или Туз — рисуем большую масть
           <text x="50" y="88" fontSize="42" textAnchor="middle" fill={t.text} fontWeight="700">
