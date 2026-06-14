@@ -245,6 +245,50 @@ export function getDeckTheme(theme, suit) {
       inner: "#0f0f2a",
       pipBg: "rgba(124,58,237,0.06)",
     },
+    pink: {
+      name: "Pink",
+      rarity: "mythic",
+      bg: "#5a2346",
+      border: "#ff7ac8",
+      glow: "#ff7ac8",
+      text: isRed ? "#ffe6f4" : "#fffafb",
+      accent: "#ffc1e3",
+      inner: "#74305a",
+      pipBg: "rgba(255,192,227,0.12)",
+    },
+    cosmic: {
+      name: "Cosmic",
+      rarity: "mythic",
+      bg: "#02000c",
+      border: "#d946ef",
+      glow: "#8b5cf6",
+      text: isRed ? "#fb7185" : "#06b6d4",
+      accent: "#a78bfa",
+      inner: "#0f0926",
+      pipBg: "rgba(217,70,239,0.08)",
+    },
+    magma: {
+      name: "Magma",
+      rarity: "mythic",
+      bg: "#0c0200",
+      border: "#f97316",
+      glow: "#ef4444",
+      text: isRed ? "#fca5a5" : "#fef08a",
+      accent: "#eab308",
+      inner: "#240600",
+      pipBg: "rgba(249,115,22,0.08)",
+    },
+    matrix: {
+      name: "Matrix",
+      rarity: "mythic",
+      bg: "#000500",
+      border: "#22c55e",
+      glow: "#4ade80",
+      text: isRed ? "#f87171" : "#86efac",
+      accent: "#4ade80",
+      inner: "#031703",
+      pipBg: "rgba(34,197,94,0.08)",
+    },
   };
 
   return themes[theme] || themes.neon;
@@ -300,6 +344,29 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
     <div className={`${compact ? "w-12 h-[72px]" : "w-16 h-24"} ${className}`}>
       <svg viewBox="0 0 100 150" className="w-full h-full">
         <defs>
+          <style>{`
+            @keyframes pulse-stars-${rank}-${card.suit} {
+              0%, 100% { opacity: 0.25; }
+              50% { opacity: 0.95; }
+            }
+            @keyframes rotate-orbit-${rank}-${card.suit} {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            @keyframes lava-flow-${rank}-${card.suit} {
+              0%, 100% { stroke-opacity: 0.4; filter: drop-shadow(0 0 1px #ef4444); }
+              50% { stroke-opacity: 0.9; filter: drop-shadow(0 0 4px #eab308); }
+            }
+            @keyframes matrix-code-${rank}-${card.suit} {
+              0% { stroke-dashoffset: 0; }
+              100% { stroke-dashoffset: -30; }
+            }
+            .star-p-1-${rank}-${card.suit} { animation: pulse-stars-${rank}-${card.suit} 1.5s ease-in-out infinite; }
+            .star-p-2-${rank}-${card.suit} { animation: pulse-stars-${rank}-${card.suit} 2.5s ease-in-out infinite; }
+            .orbit-rot-${rank}-${card.suit} { transform-origin: 50px 75px; animation: rotate-orbit-${rank}-${card.suit} 12s linear infinite; }
+            .lava-f-${rank}-${card.suit} { animation: lava-flow-${rank}-${card.suit} 4s ease-in-out infinite; }
+            .matrix-c-${rank}-${card.suit} { animation: matrix-code-${rank}-${card.suit} 2.5s linear infinite; }
+          `}</style>
           <radialGradient id={`face-glow-${theme}-${rank}-${card.suit}`} cx="50%" cy="50%">
             <stop offset="0" stopColor={t.glow} stopOpacity="0.35" />
             <stop offset="100%" stopColor="#000" stopOpacity="0" />
@@ -331,6 +398,39 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
           stroke={t.border}
           strokeOpacity="0.14"
         />
+
+        <circle cx="50" cy="75" r="52" fill={`url(#face-glow-${theme}-${rank}-${card.suit})`} />
+
+        {/* CUSTOM ANIMATED BACKDROPS FOR PREMIUM DECKS */}
+        {theme === "cosmic" && (
+          <g>
+            <ellipse cx="50" cy="75" rx="36" ry="12" fill="none" stroke={`url(#face-frame-${theme}-${rank}-${card.suit})`} strokeWidth="0.75" opacity="0.3" className={`orbit-rot-${rank}-${card.suit}`} />
+            <ellipse cx="50" cy="75" rx="28" ry="24" fill="none" stroke={t.accent} strokeWidth="0.5" opacity="0.2" className={`orbit-rot-${rank}-${card.suit}`} style={{ animationDirection: 'reverse', animationDuration: '20s' }} />
+            <circle cx="25" cy="55" r="1.5" fill="#ffffff" className={`star-p-1-${rank}-${card.suit}`} />
+            <circle cx="75" cy="95" r="1.2" fill="#ffffff" className={`star-p-2-${rank}-${card.suit}`} />
+            <circle cx="35" cy="115" r="1.8" fill="#a78bfa" className={`star-p-1-${rank}-${card.suit}`} />
+            <circle cx="68" cy="45" r="1.0" fill="#06b6d4" className={`star-p-2-${rank}-${card.suit}`} />
+            <circle cx="48" cy="38" r="1.4" fill="#ffffff" className={`star-p-1-${rank}-${card.suit}`} />
+            <circle cx="52" cy="118" r="1.2" fill="#a78bfa" className={`star-p-2-${rank}-${card.suit}`} />
+          </g>
+        )}
+
+        {theme === "magma" && (
+          <g>
+            <path d="M10,135 Q30,115 25,95 T60,85 T78,115 T90,95" fill="none" stroke={t.border} strokeWidth="1.5" strokeLinecap="round" className={`lava-f-${rank}-${card.suit}`} />
+            <path d="M18,138 Q25,120 45,110 T58,128 T85,110" fill="none" stroke={t.accent} strokeWidth="1.0" strokeLinecap="round" className={`lava-f-${rank}-${card.suit}`} style={{ animationDelay: '2s' }} />
+            <path d="M30,30 Q45,50 35,75 T70,60 T85,25" fill="none" stroke={t.border} strokeWidth="1.2" strokeLinecap="round" className={`lava-f-${rank}-${card.suit}`} style={{ animationDelay: '1s' }} />
+          </g>
+        )}
+
+        {theme === "matrix" && (
+          <g opacity="0.55">
+            <line x1="16" y1="12" x2="16" y2="138" stroke={t.accent} strokeWidth="1.0" strokeDasharray="6,24" className={`matrix-c-${rank}-${card.suit}`} />
+            <line x1="34" y1="12" x2="34" y2="138" stroke={t.border} strokeWidth="0.8" strokeDasharray="10,30" className={`matrix-c-${rank}-${card.suit}`} style={{ animationDuration: '3.5s', animationDirection: 'reverse' }} />
+            <line x1="66" y1="12" x2="66" y2="138" stroke={t.accent} strokeWidth="1.2" strokeDasharray="4,20" className={`matrix-c-${rank}-${card.suit}`} style={{ animationDuration: '1.8s' }} />
+            <line x1="84" y1="12" x2="84" y2="138" stroke={t.border} strokeWidth="0.8" strokeDasharray="8,28" className={`matrix-c-${rank}-${card.suit}`} style={{ animationDuration: '4s' }} />
+          </g>
+        )}
 
         <circle cx="50" cy="75" r="52" fill={`url(#face-glow-${theme}-${rank}-${card.suit})`} />
 
