@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Row;
 
