@@ -2474,7 +2474,14 @@ mod tests {
         }
 
         let room_id = "test_room".to_string();
-        let actor_tx = start_room_actor(room_id.clone(), mock_players, manager_tx, 100, 12, RoomKind::Queue);
+        let actor_tx = start_room_actor(
+            room_id.clone(),
+            mock_players,
+            manager_tx,
+            100,
+            12,
+            RoomKind::Queue,
+        );
 
         let attacker_id = 999;
         let card = Card {
