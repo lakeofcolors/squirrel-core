@@ -4,7 +4,7 @@ metadata:
   name: squirrel-core
   namespace: game
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
