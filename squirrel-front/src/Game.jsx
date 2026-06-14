@@ -421,6 +421,39 @@ export function getDeckTheme(theme, suit) {
       inner: "#290505",
       pipBg: "rgba(234,88,12,0.08)",
     },
+    cosmogenesis: {
+      name: "Cosmogenesis",
+      rarity: "mythic",
+      bg: "#030712",
+      border: "#8b5cf6",
+      glow: "#ffffff",
+      text: isRed ? "#c084fc" : "#a78bfa",
+      accent: "#e9d5ff",
+      inner: "#0f111a",
+      pipBg: "rgba(139,92,246,0.08)",
+    },
+    hyperdrive: {
+      name: "Hyperdrive",
+      rarity: "mythic",
+      bg: "#020617",
+      border: "#06b6d4",
+      glow: "#ffffff",
+      text: isRed ? "#38bdf8" : "#22d3ee",
+      accent: "#a5f3fc",
+      inner: "#080e1e",
+      pipBg: "rgba(6,182,212,0.08)",
+    },
+    alchemist: {
+      name: "Alchemist",
+      rarity: "mythic",
+      bg: "#110a03",
+      border: "#d97706",
+      glow: "#14b8a6",
+      text: isRed ? "#fcd34d" : "#99f6e4",
+      accent: "#fbbf24",
+      inner: "#271808",
+      pipBg: "rgba(217,119,6,0.08)",
+    },
   };
 
   return themes[theme] || themes.neon;
@@ -547,6 +580,23 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
               0%, 100% { filter: drop-shadow(0 0 2px #ea580c) brightness(1); }
               50% { filter: drop-shadow(0 0 6px #facc15) brightness(1.25); }
             }
+            @keyframes nebula-expand-${rank}-${card.suit} {
+              0%, 100% { transform: scale(0.96) rotate(0deg); opacity: 0.4; filter: drop-shadow(0 0 1px #8b5cf6); }
+              50% { transform: scale(1.04) rotate(180deg); opacity: 0.85; filter: drop-shadow(0 0 5px #d8b4fe); }
+            }
+            @keyframes speed-warp-${rank}-${card.suit} {
+              0% { stroke-dashoffset: 50; opacity: 0.2; }
+              50% { opacity: 0.95; }
+              100% { stroke-dashoffset: -150; opacity: 0.2; }
+            }
+            @keyframes liquid-flow-${rank}-${card.suit} {
+              0%, 100% { transform: scaleY(0.95) translateY(0); }
+              50% { transform: scaleY(1.05) translateY(-3px); }
+            }
+            @keyframes rune-spin-${rank}-${card.suit} {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
             .star-p-1-${rank}-${card.suit} { animation: pulse-stars-${rank}-${card.suit} 1.5s ease-in-out infinite; }
             .star-p-2-${rank}-${card.suit} { animation: pulse-stars-${rank}-${card.suit} 2.5s ease-in-out infinite; }
             .orbit-rot-${rank}-${card.suit} { transform-origin: 50px 75px; animation: rotate-orbit-${rank}-${card.suit} 12s linear infinite; }
@@ -564,6 +614,10 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
             .cyber-g-${rank}-${card.suit} { transform-origin: 50px 75px; animation: cyber-glitch-${rank}-${card.suit} 1.2s steps(2) infinite; }
             .chronos-t-${rank}-${card.suit} { transform-origin: 50px 75px; animation: chronos-step-${rank}-${card.suit} 12s steps(12) infinite; }
             .inferno-b-${rank}-${card.suit} { animation: inferno-burn-${rank}-${card.suit} 3s ease-in-out infinite; }
+            .nebula-e-${rank}-${card.suit} { transform-origin: 50px 75px; animation: nebula-expand-${rank}-${card.suit} 8s ease-in-out infinite; }
+            .speed-w-${rank}-${card.suit} { animation: speed-warp-${rank}-${card.suit} 1.5s linear infinite; }
+            .liquid-f-${rank}-${card.suit} { transform-origin: 50px 75px; animation: liquid-flow-${rank}-${card.suit} 4s ease-in-out infinite; }
+            .rune-s-${rank}-${card.suit} { transform-origin: 50px 75px; animation: rune-spin-${rank}-${card.suit} 25s linear infinite; }
           `}</style>
           <radialGradient id={`face-glow-${theme}-${rank}-${card.suit}`} cx="50%" cy="50%">
             <stop offset="0" stopColor={t.glow} stopOpacity="0.35" />
@@ -759,6 +813,39 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
             <circle cx="28" cy="115" r="1.5" fill="#facc15" className={`bio-b-${rank}-${card.suit}`} style={{ animationDuration: '2.5s' }} />
             <circle cx="72" cy="95" r="1.2" fill="#ea580c" className={`bio-b-${rank}-${card.suit}`} style={{ animationDuration: '3.5s', animationDelay: '1s' }} />
             <circle cx="50" cy="130" r="2.0" fill="#dc2626" className={`bio-b-${rank}-${card.suit}`} style={{ animationDuration: '4s', animationDelay: '0.5s' }} />
+          </g>
+        )}
+
+        {theme === "cosmogenesis" && (
+          <g className={`nebula-e-${rank}-${card.suit}`}>
+            <circle cx="50" cy="75" r="32" fill="none" stroke={t.border} strokeWidth="1.2" strokeDasharray="12,18" />
+            <circle cx="50" cy="75" r="22" fill="none" stroke={t.accent} strokeWidth="0.8" strokeDasharray="8,10" style={{ animationDirection: 'reverse' }} />
+            <path d="M50,35 A40,40 0 0,0 90,75 A40,40 0 0,0 50,115 A40,40 0 0,0 10,75 Z" fill="none" stroke="#ffffff" strokeWidth="0.5" opacity="0.3" />
+            <circle cx="35" cy="50" r="1.5" fill="#ffffff" className={`star-p-1-${rank}-${card.suit}`} />
+            <circle cx="65" cy="100" r="1.8" fill="#ffffff" className={`star-p-2-${rank}-${card.suit}`} />
+          </g>
+        )}
+
+        {theme === "hyperdrive" && (
+          <g>
+            <g className={`mecha-h-${rank}-${card.suit}`} opacity="0.3">
+              <path d="M12,12 L88,12 L88,138 L12,138 Z" fill="none" stroke={t.border} strokeWidth="0.5" />
+            </g>
+            <line x1="25" y1="12" x2="25" y2="138" stroke={t.border} strokeWidth="0.75" strokeDasharray="15,40" className={`speed-w-${rank}-${card.suit}`} />
+            <line x1="50" y1="12" x2="50" y2="138" stroke="#ffffff" strokeWidth="1" strokeDasharray="25,60" className={`speed-w-${rank}-${card.suit}`} style={{ animationDelay: '0.4s' }} />
+            <line x1="75" y1="12" x2="75" y2="138" stroke={t.border} strokeWidth="0.75" strokeDasharray="10,50" className={`speed-w-${rank}-${card.suit}`} style={{ animationDelay: '0.8s' }} />
+          </g>
+        )}
+
+        {theme === "alchemist" && (
+          <g>
+            <g className={`rune-s-${rank}-${card.suit}`} opacity="0.45">
+              <circle cx="50" cy="75" r="38" fill="none" stroke={t.border} strokeWidth="1.2" />
+              <polygon points="50,37 83,93 17,93" fill="none" stroke={t.border} strokeWidth="0.75" />
+              <polygon points="50,113 83,57 17,57" fill="none" stroke={t.border} strokeWidth="0.75" />
+            </g>
+            <path d="M10,125 C30,118 40,132 50,125 C60,118 70,132 90,125" fill="none" stroke={t.accent} strokeWidth="1" className={`liquid-f-${rank}-${card.suit}`} />
+            <path d="M10,132 C30,125 40,139 50,132 C60,125 70,139 90,132" fill="none" stroke={t.glow} strokeWidth="0.75" className={`liquid-f-${rank}-${card.suit}`} style={{ animationDelay: '1.5s' }} />
           </g>
         )}
 
@@ -1145,6 +1232,95 @@ export function CardFace({ card, compact = false, className = "", theme = "neon"
                   <path d="M32,60 L68,60 L68,92 L32,92 Z" fill="none" stroke="#dc2626" strokeWidth="1" strokeDasharray="3,5" />
                   <polygon points="50,44 64,54 50,64 36,54" fill="#ea580c" stroke="#facc15" strokeWidth="1.2" className={`rune-p-${rank}-${card.suit}`} />
                   <line x1="50" y1="64" x2="50" y2="92" stroke="#ffffff" strokeWidth="1.5" />
+                </g>
+              )}
+            </g>
+          ) : theme === "cosmogenesis" ? (
+            <g>
+              {card.rank === "Jack" && (
+                <g>
+                  <line x1="50" y1="28" x2="50" y2="120" stroke="#e9d5ff" strokeWidth="3.5" strokeLinecap="round" />
+                  <line x1="50" y1="35" x2="50" y2="115" stroke="#8b5cf6" strokeWidth="1.2" />
+                  <circle cx="50" cy="40" r="10" fill="none" stroke="#e9d5ff" strokeWidth="1.5" />
+                  <polygon points="50,25 54,36 50,47 46,36" fill="#ffffff" className={`rune-p-${rank}-${card.suit}`} />
+                  <line x1="32" y1="40" x2="68" y2="40" stroke="#ffffff" strokeWidth="1" opacity="0.6" />
+                  <line x1="50" y1="22" x2="50" y2="58" stroke="#ffffff" strokeWidth="1" opacity="0.6" />
+                </g>
+              )}
+              {card.rank === "Queen" && (
+                <g>
+                  <g className={`nebula-e-${rank}-${card.suit}`} style={{ animationDuration: '6s' }}>
+                    <circle cx="50" cy="72" r="28" fill="none" stroke="#e9d5ff" strokeWidth="1" strokeDasharray="4,8" />
+                    <circle cx="50" cy="72" r="18" fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="3,6" />
+                  </g>
+                  <path d="M26,82 L34,48 L50,66 L66,48 L74,82 Z" fill="#0f111a" stroke="#e9d5ff" strokeWidth="2" />
+                  <circle cx="50" cy="74" r="5" fill="#8b5cf6" className={`rune-p-${rank}-${card.suit}`} />
+                </g>
+              )}
+              {card.rank === "King" && (
+                <g>
+                  <g className={`orbit-rot-${rank}-${card.suit}`} style={{ animationDuration: '10s' }}>
+                    <path d="M50,72 Q65,40 50,22 Q35,40 50,72 Z" fill="none" stroke="#e9d5ff" strokeWidth="1" />
+                    <path d="M50,72 Q80,72 50,112 Q20,72 50,72 Z" fill="none" stroke="#8b5cf6" strokeWidth="1" />
+                  </g>
+                  <circle cx="50" cy="72" r="16" fill="#030712" stroke="#ffffff" strokeWidth="2.5" />
+                  <circle cx="50" cy="72" r="8" fill="#8b5cf6" className={`rune-p-${rank}-${card.suit}`} />
+                </g>
+              )}
+            </g>
+          ) : theme === "hyperdrive" ? (
+            <g>
+              {card.rank === "Jack" && (
+                <g>
+                  <rect x="34" y="38" width="32" height="74" rx="6" fill="#080e1e" stroke="#06b6d4" strokeWidth="2.5" />
+                  <line x1="50" y1="46" x2="50" y2="104" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" className={`rune-p-${rank}-${card.suit}`} />
+                  <line x1="42" y1="42" x2="42" y2="108" stroke="#a5f3fc" strokeWidth="1.2" strokeDasharray="4,8" />
+                  <line x1="58" y1="42" x2="58" y2="108" stroke="#a5f3fc" strokeWidth="1.2" strokeDasharray="4,8" />
+                </g>
+              )}
+              {card.rank === "Queen" && (
+                <g className={`orbit-rot-${rank}-${card.suit}`} style={{ animationDuration: '14s' }}>
+                  <circle cx="50" cy="72" r="26" fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeDasharray="12,6,4,6" />
+                  <circle cx="50" cy="72" r="18" fill="none" stroke="#a5f3fc" strokeWidth="1" strokeDasharray="2,4" />
+                  <polygon points="50,48 54,58 46,58" fill="#ffffff" />
+                  <polygon points="50,96 54,86 46,86" fill="#ffffff" />
+                </g>
+              )}
+              {card.rank === "King" && (
+                <g>
+                  <circle cx="50" cy="72" r="28" fill="none" stroke="#06b6d4" strokeWidth="3" />
+                  <circle cx="50" cy="72" r="22" fill="none" stroke="#ffffff" strokeWidth="1" strokeDasharray="6,4" className={`orbit-rot-${rank}-${card.suit}`} style={{ animationDuration: '8s' }} />
+                  <rect x="28" y="68" width="44" height="8" rx="2" fill="#080e1e" stroke="#a5f3fc" strokeWidth="1.5" />
+                  <circle cx="50" cy="72" r="4" fill="#06b6d4" className={`rune-p-${rank}-${card.suit}`} />
+                </g>
+              )}
+            </g>
+          ) : theme === "alchemist" ? (
+            <g>
+              {card.rank === "Jack" && (
+                <g>
+                  <path d="M42,40 L58,40 L58,54 L72,88 A16,16 0 0,1 50,110 A16,16 0 0,1 28,88 L42,54 Z" fill="none" stroke="#fbbf24" strokeWidth="2" />
+                  <path d="M34,88 A10,10 0 0,0 50,98 A10,10 0 0,0 66,88 Z" fill="#d97706" opacity="0.8" className={`liquid-f-${rank}-${card.suit}`} />
+                  <circle cx="46" cy="85" r="1.5" fill="#ffffff" className={`bio-b-${rank}-${card.suit}`} style={{ animationDuration: '2s' }} />
+                  <circle cx="54" cy="78" r="1" fill="#ffffff" className={`bio-b-${rank}-${card.suit}`} style={{ animationDuration: '2.5s', animationDelay: '0.8s' }} />
+                </g>
+              )}
+              {card.rank === "Queen" && (
+                <g>
+                  <path d="M30,55 A22,22 0 0,0 70,55 Q50,72 30,55" fill="none" stroke="#fbbf24" strokeWidth="2" />
+                  <path d="M50,75 C53,82 56,86 50,94 C44,86 47,82 50,75" fill="#fbbf24" className={`rune-p-${rank}-${card.suit}`} />
+                  <circle cx="50" cy="62" r="6" fill="#14b8a6" stroke="#fbbf24" strokeWidth="1" />
+                </g>
+              )}
+              {card.rank === "King" && (
+                <g>
+                  <g className={`rune-s-${rank}-${card.suit}`} style={{ animationDuration: '18s' }}>
+                    <circle cx="50" cy="72" r="28" fill="none" stroke="#fbbf24" strokeWidth="1.8" />
+                    <polygon points="50,44 74,86 26,86" fill="none" stroke="#fbbf24" strokeWidth="1" />
+                    <polygon points="50,100 74,58 26,58" fill="none" stroke="#fbbf24" strokeWidth="1" />
+                  </g>
+                  <circle cx="50" cy="72" r="10" fill="#271808" stroke="#14b8a6" strokeWidth="2" />
+                  <polygon points="50,68 53,74 47,74" fill="#ffffff" className={`rune-p-${rank}-${card.suit}`} />
                 </g>
               )}
             </g>
