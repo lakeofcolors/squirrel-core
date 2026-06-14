@@ -36,6 +36,7 @@ export function cleanup() {
     socket.onerror = null;
     socket = null;
   }
+  useGameStore.getState().setWsConnected(false);
 }
 
 export async function refreshAuthToken() {
@@ -107,6 +108,7 @@ export function connectWS(navigate) {
   socket = new WebSocket(getUrl("/v1/ws", true), ["jwt", token]);
 
   socket.onopen = () => {
+    useGameStore.getState().setWsConnected(true);
     subscribeRooms();
   };
 

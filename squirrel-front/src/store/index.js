@@ -26,6 +26,9 @@ export const useGameStore = create((set, get) => ({
   setUser: (user) => set({ user }),
   logout: () => set({ user: null }),
 
+  wsConnected: false,
+  setWsConnected: (connected) => set({ wsConnected: connected }),
+
   friendRequestsCount: 0,
   setFriendRequestsCount: (count) => set({ friendRequestsCount: count }),
 

@@ -78,6 +78,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const token = useGameStore((s) => s.token) || localStorage.getItem("access_token");
+  const wsConnected = useGameStore((s) => s.wsConnected);
 
   useEffect(() => {
     // Не подключаемся если на лендинге/логине
@@ -93,6 +94,9 @@ function App() {
     }
   }, [navigate, location.pathname, token]);
 
+  const isGameRoute = location.pathname !== "/" && location.pathname !== "/login";
+  const showDisconnectOverlay = token && isGameRoute && !wsConnected;
+
   return (
     <>
       <Routes>
@@ -103,6 +107,19 @@ function App() {
 
       <ReadyCheckModal />
       <VsScreenModal />
+
+      {showDisconnectOverlay && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-4 text-center">
+          <div className="bg-[#1a1a2e] border border-red-500/30 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center gap-4 animate-pulse">
+            <span className="text-4xl">🔌</span>
+            <h3 className="text-xl font-bold text-white">Соединение потеряно</h3>
+            <p className="text-gray-400 text-sm">
+              Пытаемся восстановить подключение к игровому серверу...
+            </p>
+            <div className="mt-2 w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+      )}
 
       <ToastContainer
         position="top-right"
