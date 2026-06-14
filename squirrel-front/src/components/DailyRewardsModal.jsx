@@ -4,7 +4,7 @@ import axios from "axios";
 import { getUrl } from "../config/settings";
 import { useGameStore } from "../store";
 
-export default function DailyRewardsModal({ isOpen, onClose, onSuccess }) {
+export default function DailyRewardsModal({ isOpen, onClose, onSuccess, onOpenChest, onUseBooster }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -89,7 +89,7 @@ export default function DailyRewardsModal({ isOpen, onClose, onSuccess }) {
                animate={{ opacity: 1, scale: 1 }}
                className="p-8 pt-4 flex flex-col items-center"
             >
-               <h3 className="text-amber-400 font-bold text-xl mb-4 text-center">День {claimResult.day} пройден!</h3>
+               <h3 className="text-amber-400 font-bold text-xl mb-4 text-center">Получен ежедневный бонус!</h3>
                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-amber-400/20 to-orange-600/20 border-2 border-amber-500 flex items-center justify-center text-5xl mb-6 shadow-[0_0_30px_rgba(251,191,36,0.5)]">
                  {claimResult.reward_type === "nuts" ? "🥜" : (
                     <img src={`/chests/${claimResult.chest_type || 'common'}.png`} alt="chest" className="w-20 h-20 object-contain drop-shadow-md" />
@@ -99,12 +99,50 @@ export default function DailyRewardsModal({ isOpen, onClose, onSuccess }) {
                  {claimResult.reward_type === "nuts" ? `+${claimResult.amount}` : "Новый сундук!"}
                </div>
 
-               <button
-                 onClick={onClose}
-                 className="mt-6 w-full py-4 text-lg font-bold bg-white text-black rounded-2xl active:scale-95 transition-transform"
-               >
-                 Отлично!
-               </button>
+               {claimResult.reward_type === "chest" ? (
+                 <div className="flex flex-col gap-2 w-full mt-6">
+                   <button
+                     onClick={() => {
+                       if (onOpenChest) onOpenChest(claimResult.chest_type || "common");
+                       onClose();
+                     }}
+                     className="w-full py-4 text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-black rounded-2xl active:scale-95 transition-all shadow-xl shadow-orange-500/20 hover:brightness-110"
+                   >
+                     Открыть сейчас
+                   </button>
+                   <button
+                     onClick={onClose}
+                     className="w-full py-3 text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                   >
+                     Открыть позже
+                   </button>
+                 </div>
+               ) : claimResult.reward_type === "booster" ? (
+                 <div className="flex flex-col gap-2 w-full mt-6">
+                   <button
+                     onClick={() => {
+                       if (onUseBooster) onUseBooster(claimResult.booster_key || claimResult.item_id);
+                       onClose();
+                     }}
+                     className="w-full py-4 text-lg font-bold bg-gradient-to-r from-pink-500 to-rose-400 text-white rounded-2xl active:scale-95 transition-all shadow-xl shadow-pink-500/20 hover:brightness-110"
+                   >
+                     Использовать сейчас
+                   </button>
+                   <button
+                     onClick={onClose}
+                     className="w-full py-3 text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                   >
+                     Использовать позже
+                   </button>
+                 </div>
+               ) : (
+                 <button
+                   onClick={onClose}
+                   className="mt-6 w-full py-4 text-lg font-bold bg-white text-black rounded-2xl active:scale-95 transition-transform"
+                 >
+                   Отлично!
+                 </button>
+               )}
             </motion.div>
           ) : (
             <div className="p-6 pt-2">

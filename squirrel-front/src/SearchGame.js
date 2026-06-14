@@ -3719,6 +3719,21 @@ export default function GameSearch() {
   const [eventsOpen, setEventsOpen] = useState(false);
   const [luckySpinOpen, setLuckySpinOpen] = useState(false);
   const [slotsModalOpen, setSlotsModalOpen] = useState(false);
+  const [chestToOpen, setChestToOpen] = useState(null);
+
+  const handleUseBooster = async (item_key) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      await axios.post(getUrl("/v1/inventory/use"), { item_key }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Бустер успешно активирован!");
+      const ures = await axios.get(getUrl("/auth/me"), { headers: { Authorization: `Bearer ${token}` } });
+      setUser(ures.data);
+    } catch (e) {
+      toast.error(e.response?.data || "Не удалось использовать предмет");
+    }
+  };
 
   const navigate = useNavigate();
 
@@ -3894,8 +3909,14 @@ export default function GameSearch() {
          onClose={() => setDailyRewardsOpen(false)}
          onSuccess={() => {
            // update user store
-           axios.get(getUrl("/auth/me"), { headers: { Authorization: `Bearer ${currentUser?.token}` }}).then(res => setUser(res.data)).catch(()=>{});
-           setDailyRewardsOpen(false);
+           const token = localStorage.getItem("access_token");
+           axios.get(getUrl("/auth/me"), { headers: { Authorization: `Bearer ${token}` }}).then(res => setUser(res.data)).catch(()=>{});
+         }}
+         onOpenChest={(chestType) => {
+           setChestToOpen(chestType);
+         }}
+         onUseBooster={(boosterKey) => {
+           handleUseBooster(boosterKey);
          }}
       />
 
@@ -3961,6 +3982,16 @@ export default function GameSearch() {
           </div>
         </div>
       )}
+
+      <ChestOpeningModal 
+         isOpen={!!chestToOpen} 
+         chestType={chestToOpen} 
+         onClose={() => setChestToOpen(null)} 
+         onSuccess={() => {
+            const token = localStorage.getItem("access_token");
+            axios.get(getUrl("/auth/me"), { headers: { Authorization: `Bearer ${token}` }}).then(res => setUser(res.data)).catch(()=>{});
+         }}
+      />
 
       <InviteModal />
       <BottomNav activeTab={uiState.activeTab} dispatch={dispatch} />
