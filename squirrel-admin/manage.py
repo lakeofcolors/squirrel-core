@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+# Trigger CI/CD pipeline for Django Admin
 import os
 import sys
 

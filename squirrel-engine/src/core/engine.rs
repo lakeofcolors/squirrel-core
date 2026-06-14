@@ -2353,7 +2353,7 @@ mod tests {
     use super::*;
     use crate::core::context::{set_global_context, AppContext};
     use crate::utils::schemas::{
-        Currency, League, PlayerId, QueueCommand, QueueKey, RoomKind, RoomManagerCommand,
+        Card, Currency, League, PlayerId, QueueCommand, QueueKey, RoomKind, RoomManagerCommand,
     };
     use sqlx::PgPool;
     use std::collections::{HashMap, VecDeque};
@@ -2461,6 +2461,10 @@ mod tests {
                 username: None,
                 rating: 1000,
                 photo_url: None,
+                xp: 0,
+                is_bot: false,
+                bot_difficulty: None,
+                is_ghost: false,
             };
             app_ctx
                 .connection_pool()
@@ -2470,7 +2474,7 @@ mod tests {
         }
 
         let room_id = "test_room".to_string();
-        let actor_tx = start_room_actor(room_id.clone(), mock_players, manager_tx, 100);
+        let actor_tx = start_room_actor(room_id.clone(), mock_players, manager_tx, 100, 12, RoomKind::Queue);
 
         let attacker_id = 999;
         let card = Card {

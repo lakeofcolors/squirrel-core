@@ -254,6 +254,10 @@ mod tests {
             username: Some(format!("Player {}", id)),
             rating: 1000,
             photo_url: None,
+            xp: 0,
+            is_bot: false,
+            bot_difficulty: None,
+            is_ghost: false,
         }
     }
 

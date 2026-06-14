@@ -29,3 +29,7 @@ node_modules/
 
 # OS files
 .DS_Store
+
+# Virtual environments
+venv/
+**/venv/
