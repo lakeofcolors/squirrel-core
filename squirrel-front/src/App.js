@@ -1,4 +1,5 @@
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import LandingPage from "./LandingPage";
 import SquirrelLoginForm from "./SquirrelLoginForm";
 import SquirrelGameTable from "./Game";
 import GameSearch from "./SearchGame";
@@ -100,7 +101,8 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<SquirrelLoginForm />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<SquirrelLoginForm />} />
         <Route path="/find" element={<GameSearch />} />
         <Route path="/game" element={<SquirrelGameTable />} />
       </Routes>

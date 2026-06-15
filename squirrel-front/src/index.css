@@ -7,7 +7,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -52,3 +52,205 @@ code {
 .animate-slide-up {
   animation: slide-up 0.35s ease-out;
 }
+
+/* ==========================================================================
+   OPTIMIZED GPU-ACCELERATED CARD DECK ANIMATIONS (NO HEAVY FILTERS)
+   ========================================================================== */
+
+@keyframes pulse-stars {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.95; }
+}
+@keyframes rotate-orbit {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes lava-flow {
+  0%, 100% { stroke-opacity: 0.35; }
+  50% { stroke-opacity: 0.95; }
+}
+@keyframes matrix-code {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -30; }
+}
+@keyframes rotate-arcane {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes pulse-rune {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+@keyframes mecha-scan {
+  0%, 100% { transform: translateY(12px); opacity: 0.2; }
+  50% { transform: translateY(138px); opacity: 0.9; }
+}
+@keyframes mecha-hud {
+  0%, 100% { opacity: 0.4; transform: scale(0.98); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+@keyframes synth-grid {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.7; }
+}
+@keyframes egypt-sand {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.8; }
+}
+@keyframes singularity-warp {
+  0% { transform: rotate(0deg) scale(0.94); }
+  50% { transform: rotate(180deg) scale(1.06); }
+  100% { transform: rotate(360deg) scale(0.94); }
+}
+@keyframes glacier-shimmer {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.9; }
+}
+@keyframes biohazard-bubble {
+  0% { transform: translateY(20px); opacity: 0; }
+  20% { opacity: 0.7; }
+  80% { opacity: 0.7; }
+  100% { transform: translateY(-80px); opacity: 0; }
+}
+@keyframes cyber-glitch {
+  0%, 100% { transform: translate(0) skew(0deg); }
+  20% { transform: translate(-2px, 1px) skew(-4deg); }
+  40% { transform: translate(1px, -1px) skew(2deg); }
+  60% { transform: translate(-1px, 2px) skew(-2deg); }
+  80% { transform: translate(2px, -2px) skew(4deg); }
+}
+@keyframes chronos-step {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes inferno-burn {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1.0; }
+}
+@keyframes nebula-expand {
+  0%, 100% { transform: scale(0.96) rotate(0deg); opacity: 0.4; }
+  50% { transform: scale(1.04) rotate(180deg); opacity: 0.85; }
+}
+@keyframes speed-warp {
+  0% { stroke-dashoffset: 50; opacity: 0.2; }
+  50% { opacity: 0.95; }
+  100% { stroke-dashoffset: -150; opacity: 0.2; }
+}
+@keyframes liquid-flow {
+  0%, 100% { transform: scaleY(0.95) translateY(0); }
+  50% { transform: scaleY(1.05) translateY(-3px); }
+}
+@keyframes rune-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Style Classes using Optimized Animations */
+.star-p-1 { animation: pulse-stars 1.5s ease-in-out infinite; }
+.star-p-2 { animation: pulse-stars 2.5s ease-in-out infinite; }
+.orbit-rot { transform-origin: 50px 75px; animation: rotate-orbit 12s linear infinite; }
+.lava-f { animation: lava-flow 4s ease-in-out infinite; }
+.matrix-c { animation: matrix-code 2.5s linear infinite; }
+.arcane-rot { transform-origin: 50px 75px; animation: rotate-arcane 20s linear infinite; }
+.rune-p { animation: pulse-rune 3s ease-in-out infinite; }
+.mecha-s { animation: mecha-scan 4s ease-in-out infinite; }
+.mecha-h { transform-origin: 50px 75px; animation: mecha-hud 5s ease-in-out infinite; }
+.synth-g { animation: synth-grid 3s ease-in-out infinite; }
+.egypt-s { animation: egypt-sand 4s ease-in-out infinite; }
+.sing-w { transform-origin: 50px 75px; animation: singularity-warp 10s linear infinite; }
+.glac-s { animation: glacier-shimmer 2.5s ease-in-out infinite; }
+.bio-b { transform-origin: 50px 75px; animation: biohazard-bubble 3.5s linear infinite; }
+.cyber-g { transform-origin: 50px 75px; animation: cyber-glitch 1.2s steps(2) infinite; }
+.chronos-t { transform-origin: 50px 75px; animation: chronos-step 12s steps(12) infinite; }
+.inferno-b { animation: inferno-burn 3s ease-in-out infinite; }
+.nebula-e { transform-origin: 50px 75px; animation: nebula-expand 8s ease-in-out infinite; }
+.speed-w { animation: speed-warp 1.5s linear infinite; }
+.liquid-f { transform-origin: 50px 75px; animation: liquid-flow 4s ease-in-out infinite; }
+.rune-s { transform-origin: 50px 75px; animation: rune-spin 25s linear infinite; }
+
+/* GPU Composite Layer Promotion */
+.orbit-rot, .arcane-rot, .mecha-h, .sing-w, .bio-b, .cyber-g, .chronos-t, .nebula-e, .liquid-f, .rune-s, .speed-w, .lava-f, .mecha-s {
+  will-change: transform;
+}
+
+/* Chest Shake Animation */
+@keyframes chest-shake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  20%, 60% { transform: rotate(-6deg) scale(1.05); }
+  40%, 80% { transform: rotate(6deg) scale(1.05); }
+}
+.animate-shake {
+  animation: chest-shake 0.3s ease-in-out infinite;
+}
+
+/* Responsive Custom Card Sizes for Landing Page Elements */
+.hero-card {
+  width: 90px !important;
+  height: 135px !important;
+}
+@media (min-width: 640px) {
+  .hero-card {
+    width: 140px !important;
+    height: 210px !important;
+  }
+}
+
+.sim-card {
+  width: 46px !important;
+  height: 69px !important;
+}
+@media (min-width: 640px) {
+  .sim-card {
+    width: 64px !important;
+    height: 96px !important;
+  }
+}
+
+.reward-card {
+  width: 100px !important;
+  height: 150px !important;
+}
+@media (min-width: 640px) {
+  .reward-card {
+    width: 150px !important;
+    height: 225px !important;
+  }
+}
+
+.gallery-card {
+  width: 76px !important;
+  height: 114px !important;
+}
+@media (min-width: 480px) {
+  .gallery-card {
+    width: 100px !important;
+    height: 150px !important;
+  }
+}
+@media (min-width: 768px) {
+  .gallery-card {
+    width: 140px !important;
+    height: 210px !important;
+  }
+}
+
+.hand-card {
+  width: 38px !important;
+  height: 57px !important;
+}
+@media (min-width: 640px) {
+  .hand-card {
+    width: 48px !important;
+    height: 72px !important;
+  }
+}
+
+/* Scrollbar Hide Utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
