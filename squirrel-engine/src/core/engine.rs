@@ -1424,6 +1424,21 @@ fn start_room_actor(
     tokio::spawn(async move {
         // let mut subs: Vec<mpsc::UnboundedSender<WSEvent>> = Vec::new();
         let app_ctx = get_global_context();
+
+        // Reload deck info from DB
+        for p_meta in players.iter_mut() {
+            if !p_meta.is_bot && !p_meta.is_ghost {
+                if let Ok(row) = sqlx::query("SELECT equipped_deck_id FROM user_equipped_items WHERE telegram_id = $1")
+                    .bind(p_meta.id)
+                    .fetch_optional(&app_ctx.db_pool)
+                    .await
+                {
+                    use sqlx::Row;
+                    p_meta.equipped_deck = row.and_then(|r| r.get("equipped_deck_id"));
+                }
+            }
+        }
+
         let mut player_positions: BiMap<PlayerId, PlayerPosition> = BiMap::new();
         let mut state = GameState::new();
         let mut disconnected: HashMap<PlayerId, Instant> = HashMap::new();
