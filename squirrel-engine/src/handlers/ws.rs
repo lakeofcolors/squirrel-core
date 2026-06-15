@@ -389,9 +389,10 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, player_id: i
 
     let profile = match sqlx::query!(
         r#"
-        SELECT telegram_id as id, username, rating, photo_url, xp
-        FROM users
-        WHERE telegram_id = $1
+        SELECT u.telegram_id as id, u.username, u.rating, u.photo_url, u.xp, uei.equipped_deck_id as equipped_deck
+        FROM users u
+        LEFT JOIN user_equipped_items uei ON u.telegram_id = uei.telegram_id
+        WHERE u.telegram_id = $1
         "#,
         player_id
     )
@@ -414,6 +415,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, player_id: i
             is_bot: false,
             bot_difficulty: None,
             is_ghost: false,
+            equipped_deck: p.equipped_deck,
         },
         None => PlayerMeta {
             id: player_id,
@@ -424,6 +426,7 @@ async fn handle_socket(socket: WebSocket, app_ctx: Arc<AppContext>, player_id: i
             is_bot: false,
             bot_difficulty: None,
             is_ghost: false,
+            equipped_deck: None,
         },
     };
 

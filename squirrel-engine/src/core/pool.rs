@@ -258,6 +258,7 @@ mod tests {
             is_bot: false,
             bot_difficulty: None,
             is_ghost: false,
+            equipped_deck: None,
         }
     }
 

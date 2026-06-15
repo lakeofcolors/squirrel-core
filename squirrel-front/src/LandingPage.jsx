@@ -10,6 +10,7 @@ import {
 import confetti from "canvas-confetti";
 import { CardFace } from "./components/CardFace";
 import { useGameStore } from "./store";
+import ChestGraphic from "./components/ChestGraphic";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -675,14 +676,7 @@ export default function LandingPage() {
                       chestType === "epic" ? "bg-amber-400 shadow-[0_0_35px_#fbbf24]" : "bg-purple-500 shadow-[0_0_30px_#a855f7]"
                     }`} />
                     
-                    <svg viewBox="0 0 100 100" className="w-28 h-28 sm:w-36 sm:h-36 relative z-10">
-                      <rect x="15" y="45" width="70" height="40" rx="6" fill={chestType === "epic" ? "#5a3a0c" : "#2e1a47"} stroke={chestType === "epic" ? "#fbbf24" : "#c084fc"} strokeWidth="3" />
-                      <path d="M15,45 Q50,20 85,45" fill={chestType === "epic" ? "#784f17" : "#442468"} stroke={chestType === "epic" ? "#fbbf24" : "#c084fc"} strokeWidth="3" />
-                      <rect x="42" y="38" width="16" height="18" rx="2" fill={chestType === "epic" ? "#fbbf24" : "#c084fc"} />
-                      <circle cx="50" cy="47" r="3" fill="#000" />
-                      <line x1="30" y1="35" x2="30" y2="85" stroke={chestType === "epic" ? "#fbbf24" : "#c084fc"} strokeWidth="1.5" strokeDasharray="5,5" />
-                      <line x1="70" y1="35" x2="70" y2="85" stroke={chestType === "epic" ? "#fbbf24" : "#c084fc"} strokeWidth="1.5" strokeDasharray="5,5" />
-                    </svg>
+                    <ChestGraphic chestType={chestType} className="w-28 h-28 sm:w-36 sm:h-36 relative z-10" />
                   </motion.div>
                   
                   <div className="text-center space-y-1">

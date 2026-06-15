@@ -200,6 +200,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                     };
 
                     let mut players_meta = vec![real_player_meta];
+                    let bot_decks = ["cyber", "magma", "arcane"];
                     for i in 1..=3 {
                         players_meta.push(PlayerMeta {
                             id: -(i as i64),
@@ -210,6 +211,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                             bot_difficulty: Some(difficulty.clone()),
                             xp: 0,
                             is_ghost: false,
+                            equipped_deck: Some(bot_decks[i - 1].to_string()),
                         });
                     }
 
@@ -300,9 +302,10 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                                 let room_id = Uuid::new_v4().to_string();
                                 let rows = sqlx::query!(
                                     r#"
-                                    SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp
+                                    SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp, uei.equipped_deck_id as equipped_deck
                                     FROM ghost_bots gb
                                     JOIN users u ON gb.telegram_id = u.telegram_id
+                                    LEFT JOIN user_equipped_items uei ON u.telegram_id = uei.telegram_id
                                     WHERE gb.is_active = true
                                     ORDER BY RANDOM()
                                     LIMIT 50
@@ -330,6 +333,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                                             crate::utils::schemas::BotDifficulty::Hard,
                                         ),
                                         xp: r.xp,
+                                        equipped_deck: r.equipped_deck,
                                     });
                                 }
 
@@ -398,9 +402,10 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
 
                     let rows = sqlx::query!(
                         r#"
-                        SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp
+                        SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp, uei.equipped_deck_id as equipped_deck
                         FROM ghost_bots gb
                         JOIN users u ON gb.telegram_id = u.telegram_id
+                        LEFT JOIN user_equipped_items uei ON u.telegram_id = uei.telegram_id
                         WHERE gb.is_active = true
                         ORDER BY RANDOM()
                         LIMIT 20
@@ -426,6 +431,7 @@ pub fn start_room_manager() -> mpsc::UnboundedSender<RoomManagerCommand> {
                         is_ghost: true,
                         bot_difficulty: Some(crate::utils::schemas::BotDifficulty::Hard),
                         xp: r.xp,
+                        equipped_deck: r.equipped_deck,
                     };
 
                     if let Some(room) = rooms.get_mut(&room_id) {
@@ -2465,6 +2471,7 @@ mod tests {
                 is_bot: false,
                 bot_difficulty: None,
                 is_ghost: false,
+                equipped_deck: None,
             };
             app_ctx
                 .connection_pool()

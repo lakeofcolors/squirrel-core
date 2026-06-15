@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT telegram_id as id, username, rating, photo_url, xp\n        FROM users\n        WHERE telegram_id = $1\n        ",
+  "query": "\n        SELECT u.telegram_id as id, u.username, u.rating, u.photo_url, u.xp, uei.equipped_deck_id as equipped_deck\n        FROM users u\n        LEFT JOIN user_equipped_items uei ON u.telegram_id = uei.telegram_id\n        WHERE u.telegram_id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "xp",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "equipped_deck",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -39,8 +44,9 @@
       true,
       false,
       true,
-      false
+      false,
+      true
     ]
   },
-  "hash": "ebf1c0d006383c94907a01fc337110cc083be19f46aeabb4678ce21b9a72cdfc"
+  "hash": "3e79290114247a665217bf40a2445f60538d384fb217f8be593da7ba582fe9c7"
 }

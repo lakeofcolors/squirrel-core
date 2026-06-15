@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        SELECT u.telegram_id, u.username, u.rating, u.photo_url, u.xp, uei.equipped_deck_id as equipped_deck\n                        FROM ghost_bots gb\n                        JOIN users u ON gb.telegram_id = u.telegram_id\n                        LEFT JOIN user_equipped_items uei ON u.telegram_id = uei.telegram_id\n                        WHERE gb.is_active = true\n                        ORDER BY RANDOM()\n                        LIMIT 20\n                        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "telegram_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "rating",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "photo_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "xp",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "equipped_deck",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "13783025721e6fa1005ab45a82828024bd5aa4e900083eca14c21411d675cd0b"
+}

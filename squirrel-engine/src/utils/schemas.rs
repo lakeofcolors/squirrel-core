@@ -32,6 +32,9 @@ pub struct PlayerMeta {
     #[sqlx(default)]
     #[serde(default)]
     pub is_ghost: bool,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub equipped_deck: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -162,7 +162,7 @@ function relativeSeat(myPosition, playerPosition) {
   }
 }
 
-export function GameHeader({ scores, eyes, lastTrick, deck }) {
+export function GameHeader({ scores, eyes, lastTrick, deck, players = [], showOtherPlayersDecks }) {
   const spectatorCount = useGameStore((s) => s.spectatorCount);
 
   return (
@@ -192,14 +192,18 @@ export function GameHeader({ scores, eyes, lastTrick, deck }) {
 
         <div className="w-[136px] sm:w-[160px] flex justify-end">
           <div className="flex gap-1 items-center">
-            {(lastTrick || []).slice(0, 4).map(([pos, card], idx) => (
-              <div
-                key={`${pos}-${card.rank}-${card.suit}-${idx}`}
-                title={`${pos}: ${rankLabel[card.rank] ?? card.rank}${suitSymbol[card.suit] ?? card.suit}`}
-              >
-                <CardFace card={card} compact theme={deck} />
-              </div>
-            ))}
+            {(lastTrick || []).slice(0, 4).map(([pos, card], idx) => {
+              const playerInfo = players.find((p) => p.position === pos);
+              const playerDeck = playerInfo?.meta?.equipped_deck || "classic";
+              return (
+                <div
+                  key={`${pos}-${card.rank}-${card.suit}-${idx}`}
+                  title={`${pos}: ${rankLabel[card.rank] ?? card.rank}${suitSymbol[card.suit] ?? card.suit}`}
+                >
+                  <CardFace card={card} compact theme={showOtherPlayersDecks ? playerDeck : deck} />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -681,6 +685,8 @@ export default function GameTable() {
   const bg = useGameStore((s) => s.user?.equipped_background || "neon");
   const isSpectating = useGameStore((s) => s.isSpectating);
   const bgTheme = getBackground(bg);
+  const showOtherPlayersDecks = useGameStore((s) => s.showOtherPlayersDecks);
+  const setShowOtherPlayersDecks = useGameStore((s) => s.setShowOtherPlayersDecks);
 
   const [showSurrenderModal, setShowSurrenderModal] = useState(false);
   const [showFriendSelectorModal, setShowFriendSelectorModal] = useState(false);
@@ -783,11 +789,16 @@ export default function GameTable() {
     if (trickToRender.length === 0 && staticDelayActive && snapshot.last_trick && snapshot.last_trick.length > 0) {
       trickToRender = snapshot.last_trick;
     }
-    return trickToRender.map(([position, card], idx) => ({
-      id: `${position}-${card.rank}-${card.suit}-${idx}`,
-      seat: relativeSeat(myPosition, position),
-      card,
-    }));
+    return trickToRender.map(([position, card], idx) => {
+      const playerInfo = snapshot.players.find((p) => p.position === position);
+      const playerDeck = playerInfo?.meta?.equipped_deck || "classic";
+      return {
+        id: `${position}-${card.rank}-${card.suit}-${idx}`,
+        seat: relativeSeat(myPosition, position),
+        card,
+        playerDeck,
+      };
+    });
   }, [snapshot, myPosition, staticDelayActive]);
 
   const isMyTurn = snapshot?.current_turn === myPosition;
@@ -837,11 +848,16 @@ export default function GameTable() {
 
     const t1 = setTimeout(() => {
       setStaticDelayActive(false);
-      const list = snapshot.last_trick.map(([pos, card], idx) => ({
-        id: `fly-${pos}-${card.rank}-${card.suit}-${idx}-${Date.now()}`,
-        fromSeat: relativeSeat(myPosition, pos),
-        card,
-      }));
+      const list = snapshot.last_trick.map(([pos, card], idx) => {
+        const playerInfo = snapshot.players.find((p) => p.position === pos);
+        const playerDeck = playerInfo?.meta?.equipped_deck || "classic";
+        return {
+          id: `fly-${pos}-${card.rank}-${card.suit}-${idx}-${Date.now()}`,
+          fromSeat: relativeSeat(myPosition, pos),
+          card,
+          playerDeck,
+        };
+      });
       setFlyCards(list);
     }, 1000);
 
@@ -851,7 +867,7 @@ export default function GameTable() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [trickWinner, lastTrickKey, myPosition]);
+  }, [trickWinner, lastTrickKey, myPosition, snapshot?.players, snapshot?.last_trick]);
 
   if (!snapshot || (!me && !isSpectating)) {
     return (
@@ -915,6 +931,8 @@ export default function GameTable() {
             eyes={snapshot.eyes}
             lastTrick={snapshot.last_trick}
             deck={deck}
+            players={snapshot.players}
+            showOtherPlayersDecks={showOtherPlayersDecks}
           />
 
           <div className="w-full flex justify-end mb-2 items-center">
@@ -943,6 +961,17 @@ export default function GameTable() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowOtherPlayersDecks(!showOtherPlayersDecks)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition active:scale-95 border ${
+                    showOtherPlayersDecks 
+                      ? "bg-purple-600/35 border-purple-400 text-purple-200" 
+                      : "bg-black/40 border-white/10 text-gray-400"
+                  }`}
+                  title={showOtherPlayersDecks ? "Показывать уникальные колоды других игроков" : "Показывать только вашу выбранную колоду для всех"}
+                >
+                  🎨 Рубашки: {showOtherPlayersDecks ? "Все" : "Своя"}
+                </button>
                 <button
                   onClick={() => setShowSlotsModal(true)}
                   className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white font-black px-4 py-1.5 rounded-full text-xs shadow-[0_0_15px_rgba(236,72,153,0.5)] transition active:scale-95 flex items-center gap-1"
@@ -1048,7 +1077,7 @@ export default function GameTable() {
                     transition={{ duration: 0.35, ease: "easeOut" }}
                     className={styleBySeat[item.seat]}
                   >
-                    <CardFace card={item.card} className="w-14 h-20 text-lg relative z-10 drop-shadow-md" theme={deck} />
+                    <CardFace card={item.card} className="w-14 h-20 text-lg relative z-10 drop-shadow-md" theme={showOtherPlayersDecks ? item.playerDeck : deck} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -1068,7 +1097,7 @@ export default function GameTable() {
                       transition={{ duration: 0.65, ease: "backIn" }}
                       className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none"
                     >
-                      <CardFace card={c.card} className="w-12 h-18 text-md" theme={deck} />
+                      <CardFace card={c.card} className="w-12 h-18 text-md" theme={showOtherPlayersDecks ? c.playerDeck : deck} />
                     </motion.div>
                   );
                 })}

@@ -204,4 +204,10 @@ export const useGameStore = create((set, get) => ({
     localStorage.setItem("eco_mode", value ? "true" : "false");
     set({ ecoMode: value });
   },
+
+  showOtherPlayersDecks: localStorage.getItem("show_other_decks") !== "false",
+  setShowOtherPlayersDecks: (value) => {
+    localStorage.setItem("show_other_decks", value ? "true" : "false");
+    set({ showOtherPlayersDecks: value });
+  },
 }));

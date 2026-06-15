@@ -4,6 +4,7 @@ import axios from "axios";
 import { getUrl } from "../config/settings";
 import { useGameStore } from "../store";
 import { DeckPreview, BackgroundPreview } from "../SearchGame";
+import ChestGraphic from "./ChestGraphic";
 
 const chestColors = {
   common: "from-gray-400 to-gray-600 shadow-gray-500",
@@ -113,11 +114,7 @@ export default function ChestOpeningModal({ isOpen, onClose, chestType = "common
               className={`relative z-10 w-48 h-48 sm:w-64 sm:h-64 cursor-pointer drop-shadow-[0_0_30px_rgba(255,255,255,0.2)]`}
             >
               {/* Chest Graphic */}
-              <img 
-                 src={`/chests/${chestType}.png`} 
-                 alt={chestNames[chestType] || "Chest"}
-                 className="w-full h-full object-contain pointer-events-none drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]" 
-              />
+              <ChestGraphic chestType={chestType} className="w-full h-full drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]" />
             </motion.div>
 
             {phase === "idle" && (

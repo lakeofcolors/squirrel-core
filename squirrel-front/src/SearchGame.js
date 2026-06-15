@@ -3,6 +3,7 @@ import { useGameStore } from "./store";
 import { getUrl } from "./config/settings";
 import { useNavigate } from "react-router-dom";
 import { CardFace } from "./components/CardFace";
+import ChestGraphic from "./components/ChestGraphic";
 import {
   findGame,
   subscribe,
@@ -1046,7 +1047,7 @@ function StorePage({ onBack }) {
                 <div key={cType} className="relative rounded-3xl border border-purple-500 bg-[#171728]/95 p-3 flex flex-col items-center shadow-lg shadow-purple-900/20 hover:bg-white/5 transition">
                    <div className="absolute top-2 right-2 bg-purple-600 font-bold border border-purple-400 text-white rounded-full px-2 py-0.5 text-xs z-10">{count} шт</div>
                    <div className="relative flex h-32 w-full items-center justify-center rounded-2xl border border-purple-500/20 bg-black/20 text-4xl overflow-hidden mt-2">
-                     <img src={`/chests/${cType}.png`} alt={cType} className="w-[120%] h-[120%] max-w-none max-h-none drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] object-cover scale-[1.2]" />
+                     <ChestGraphic chestType={cType} className="w-[110%] h-[110%] max-w-none max-h-none drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] scale-[1.1]" />
                    </div>
                    <div className="mt-3 text-sm font-extrabold text-white capitalize">{cType} Сундук</div>
                    <div className="w-full flex flex-col gap-2 mt-4">
@@ -3151,7 +3152,7 @@ function ProfilePage() {
                     className="rounded-3xl border border-purple-500 bg-[#171728]/95 p-3 shadow-lg shadow-purple-900/20 cursor-pointer hover:bg-white/5 transition"
                   >
                     <div className="relative flex h-28 items-center justify-center overflow-hidden rounded-2xl border border-purple-500/20 bg-black/20 text-4xl">
-                      <img src={`/chests/${chestType}.png`} alt={chestType} className="max-h-full max-w-full drop-shadow-lg object-contain" />
+                      <ChestGraphic chestType={chestType} className="max-h-full max-w-full drop-shadow-lg object-contain" />
                       <div className="absolute top-2 right-2 bg-purple-600 font-bold text-white text-xs px-2 py-0.5 rounded-full z-10">
                         x{count}
                       </div>
