@@ -1428,10 +1428,12 @@ fn start_room_actor(
         // Reload deck info from DB
         for p_meta in players.iter_mut() {
             if !p_meta.is_bot && !p_meta.is_ghost {
-                if let Ok(row) = sqlx::query("SELECT equipped_deck_id FROM user_equipped_items WHERE telegram_id = $1")
-                    .bind(p_meta.id)
-                    .fetch_optional(&app_ctx.db_pool)
-                    .await
+                if let Ok(row) = sqlx::query(
+                    "SELECT equipped_deck_id FROM user_equipped_items WHERE telegram_id = $1",
+                )
+                .bind(p_meta.id)
+                .fetch_optional(&app_ctx.db_pool)
+                .await
                 {
                     use sqlx::Row;
                     p_meta.equipped_deck = row.and_then(|r| r.get("equipped_deck_id"));
