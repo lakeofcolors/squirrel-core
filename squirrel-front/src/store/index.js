@@ -198,4 +198,10 @@ export const useGameStore = create((set, get) => ({
     const myPos = state.myPosition();
     return !!myPos && state.gameSnapshot?.current_turn === myPos;
   },
+
+  ecoMode: localStorage.getItem("eco_mode") === "true",
+  setEcoMode: (value) => {
+    localStorage.setItem("eco_mode", value ? "true" : "false");
+    set({ ecoMode: value });
+  },
 }));

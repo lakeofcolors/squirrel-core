@@ -8,10 +8,13 @@ import {
   Award, Menu, X
 } from "lucide-react";
 import confetti from "canvas-confetti";
-import { CardFace } from "./Game";
+import { CardFace } from "./components/CardFace";
+import { useGameStore } from "./store";
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const ecoMode = useGameStore((s) => s.ecoMode);
+  const setEcoMode = useGameStore((s) => s.setEcoMode);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Detect mobile/tablet screen widths to apply touch-safe styles & layouts
@@ -209,19 +212,34 @@ export default function LandingPage() {
             <a href="#rules" className="hover:text-white transition-colors">Правила</a>
           </nav>
 
-          <div className="hidden sm:flex items-center gap-3">
-            <button 
-              onClick={() => navigate("/login")} 
-              className="px-4 py-2 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
-            >
-              Войти
-            </button>
-            <button 
-              onClick={() => navigate("/login")}
-              className="px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 shadow-md active:scale-95 transition-all flex items-center gap-2"
-            >
-              <Play size={12} fill="currentColor" /> Играть
-            </button>
+          <div className="flex items-center gap-3">
+            {/* Eco Mode Toggle */}
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-xl text-xs font-bold text-gray-300">
+              <span className="hidden xs:inline">🔋 Эко-режим</span>
+              <span className="inline xs:hidden">🔋</span>
+              <button 
+                onClick={() => setEcoMode(!ecoMode)}
+                className={`w-8 h-4 rounded-full transition-colors relative ${ecoMode ? "bg-emerald-500" : "bg-gray-600"}`}
+                aria-label="Переключить эко-режим"
+              >
+                <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${ecoMode ? "left-4" : "left-0.5"}`} />
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-3">
+              <button 
+                onClick={() => navigate("/login")} 
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
+              >
+                Войти
+              </button>
+              <button 
+                onClick={() => navigate("/login")}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 shadow-md active:scale-95 transition-all flex items-center gap-2"
+              >
+                <Play size={12} fill="currentColor" /> Играть
+              </button>
+            </div>
           </div>
 
           {/* Hamburger Menu Trigger for Mobile */}

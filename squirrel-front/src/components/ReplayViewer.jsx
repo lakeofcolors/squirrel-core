@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CardFace, PlayerBadge, GameHeader, getBackground } from '../Game';
+import { motion } from 'framer-motion';
+import { PlayerBadge, GameHeader, getBackground } from '../Game';
+import { CardFace } from './CardFace';
 
 export default function ReplayViewer({ replayData, onClose }) {
   const { events, players } = replayData;

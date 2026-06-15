@@ -254,3 +254,9 @@ code {
   scrollbar-width: none;
 }
 
+/* Eco Mode: Disable heavy SVG keyframes and transitions for low CPU footprint */
+.eco-mode * {
+  animation: none !important;
+  transition: none !important;
+}
+
